@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B1512">
+<title>Popwatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Martian+Mono:wght@300;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --scorch:#1B1512;
+    --scorch-2:#241A15;
+    --bone:#F2E8D5;
+    --steam:#9A8B7C;
+    --cold:#2E5451;
+    --kernel:#E8B31F;
+    --pull:#EF5423;
+
+    --field:var(--scorch);
+    --ink:var(--bone);
+    --accent:var(--cold);
+
+    --display:"Archivo","Helvetica Neue",system-ui,sans-serif;
+    --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  html,body{height:100%}
+
+  body{
+    font-family:var(--display);
+    background:var(--field);
+    color:var(--ink);
+    transition:background-color 900ms ease, color 400ms ease;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+
+  #app{
+    height:100%;
+    max-width:560px;
+    margin:0 auto;
+    padding:max(18px,env(safe-area-inset-top)) 22px max(22px,env(safe-area-inset-bottom));
+    display:grid;
+    grid-template-rows:auto 1fr auto auto;
+    gap:14px;
+  }
+
+  /* ---- top rail ---- */
+  .rail{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-family:var(--mono);
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--steam);
+  }
+  .wordmark{color:var(--ink);opacity:.85}
+
+  .modes{display:flex;gap:0;border:1px solid currentColor;border-radius:2px;overflow:hidden}
+  .modes button{
+    font:inherit;letter-spacing:.12em;text-transform:uppercase;
+    background:transparent;color:inherit;border:0;
+    padding:6px 10px;cursor:pointer;
+  }
+  .modes button[aria-pressed="true"]{background:currentColor}
+  .modes button[aria-pressed="true"] span{color:var(--field);mix-blend-mode:normal}
+  .modes button:focus-visible{outline:2px solid var(--kernel);outline-offset:-2px}
+
+  /* ---- the readout ---- */
+  .readout{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    min-height:0;
+  }
+
+  .count{
+    font-family:var(--display);
+    font-variation-settings:"wdth" 112,"wght" 800;
+    font-size:clamp(96px,34vw,190px);
+    line-height:.82;
+    letter-spacing:-.03em;
+    font-variant-numeric:tabular-nums;
+    transition:color 400ms ease;
+  }
+  .count.beat{animation:beat 140ms ease-out}
+  @keyframes beat{from{transform:scale(1.035)}to{transform:scale(1)}}
+
+  .unit{
+    font-family:var(--mono);
+    font-size:11px;font-weight:300;
+    letter-spacing:.22em;text-transform:uppercase;
+    color:var(--steam);
+    margin-top:16px;
+  }
+
+  .status{
+    font-family:var(--display);
+    font-variation-settings:"wdth" 100,"wght" 700;
+    font-size:clamp(20px,6.2vw,30px);
+    letter-spacing:.02em;
+    margin-top:22px;
+    color:var(--accent);
+    transition:color 400ms ease;
+  }
+  .hint{
+    font-family:var(--mono);
+    font-size:11px;font-weight:300;line-height:1.7;
+    letter-spacing:.04em;
+    color:var(--steam);
+    margin-top:10px;
+    max-width:34ch;
+  }
+
+  /* ---- the curve: signature element ---- */
+  .curve{position:relative}
+  canvas{display:block;width:100%;height:132px}
+  .axis{
+    display:flex;justify-content:space-between;
+    font-family:var(--mono);font-size:10px;font-weight:300;
+    letter-spacing:.14em;text-transform:uppercase;
+    color:var(--steam);
+    margin-top:8px;
+  }
+  .axis b{font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+
+  /* ---- controls ---- */
+  .controls{display:grid;gap:12px}
+
+  .primary{
+    font-family:var(--display);
+    font-variation-settings:"wdth" 108,"wght" 700;
+    font-size:19px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    padding:20px;
+    border:0;border-radius:3px;
+    background:var(--ink);color:var(--field);
+    cursor:pointer;
+    transition:background-color 400ms ease,color 400ms ease;
+  }
+  .primary:focus-visible{outline:3px solid var(--kernel);outline-offset:3px}
+  .primary:active{transform:translateY(1px)}
+
+  .tapzone{
+    display:none;
+    padding:26px;border:1px dashed var(--steam);border-radius:3px;
+    background:transparent;color:var(--ink);
+    font-family:var(--mono);font-size:12px;font-weight:500;
+    letter-spacing:.16em;text-transform:uppercase;
+    cursor:pointer;
+    user-select:none;-webkit-user-select:none;
+  }
+  body[data-mode="tap"][data-run="on"] .tapzone{display:block}
+  .tapzone:active{background:rgba(242,232,213,.08)}
+  .tapzone:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
+
+  .sens{
+    display:flex;align-items:center;gap:12px;
+    font-family:var(--mono);font-size:10px;font-weight:300;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--steam);
+  }
+  body[data-mode="tap"] .sens{display:none}
+  .sens input{flex:1;accent-color:var(--kernel);min-width:0}
+
+  .note{
+    font-family:var(--mono);font-size:10px;font-weight:300;line-height:1.7;
+    color:var(--steam);letter-spacing:.03em;
+    white-space:pre-wrap;
+    max-height:34vh;overflow-y:auto;
+  }
+  .note[hidden]{display:none}
+
+  .tools{display:flex;gap:18px;justify-content:center}
+  .tool{
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;
+    color:var(--steam);background:none;border:0;padding:4px 0;
+    text-decoration:underline;text-underline-offset:4px;cursor:pointer;
+  }
+  .tool[hidden]{display:none}
+  .tool:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
+
+  /* ---- outcome prompt: two taps, filled in holding a hot pot ---- */
+  .outcome{display:grid;gap:10px}
+  .outcome[hidden]{display:none}
+  .oq{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    font-family:var(--mono);font-size:10px;font-weight:300;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--steam);
+  }
+  .opts{display:flex;gap:6px}
+  .opts button{
+    font-family:var(--mono);font-size:11px;font-weight:500;
+    letter-spacing:.1em;text-transform:uppercase;
+    background:transparent;color:var(--ink);
+    border:1px solid var(--steam);border-radius:2px;
+    padding:12px 14px;min-width:56px;cursor:pointer;
+  }
+  .opts button[aria-pressed="true"]{background:var(--ink);color:var(--field);border-color:var(--ink)}
+  .opts button:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
+
+  /* ---- run log: out of the way behind a native disclosure ---- */
+  .log{font-family:var(--mono);font-size:10px;color:var(--steam)}
+  .log summary{
+    letter-spacing:.14em;text-transform:uppercase;cursor:pointer;
+    padding:4px 0;list-style:none;
+  }
+  .log summary::-webkit-details-marker{display:none}
+  .log summary::before{content:"▸ ";}
+  .log[open] summary::before{content:"▾ ";}
+  .logwrap{overflow-x:auto;max-height:180px;overflow-y:auto;margin:6px 0}
+  .log table{border-collapse:collapse;width:100%;font-size:10px;font-weight:300}
+  .log th,.log td{text-align:right;padding:3px 6px;white-space:nowrap}
+  .log th{color:var(--ink);font-weight:500;letter-spacing:.08em;position:sticky;top:0;background:var(--field)}
+  .log td:first-child,.log th:first-child{text-align:left}
+  .log tr+tr td{border-top:1px solid rgba(154,139,124,.18)}
+
+  /* ---- state fields ---- */
+  body[data-state="popping"]{--field:#241A11;--accent:var(--kernel)}
+  /* instrument failure, not an action: dead grey, not the pull orange */
+  body[data-state="deaf"]{--field:#15171A;--accent:#9AA5AD}
+  body[data-state="deaf"] .status{animation:flash 1.4s steps(1) infinite}
+  body[data-state="slowing"]{--field:#2E1A10;--accent:#F0872B}
+  body[data-state="pull"]{--field:var(--pull);--ink:#20120C;--accent:#20120C}
+  body[data-state="pull"] .rail,
+  body[data-state="pull"] .unit,
+  body[data-state="pull"] .hint,
+  body[data-state="pull"] .axis,
+  body[data-state="pull"] .note,
+  body[data-state="pull"] .tool,
+  body[data-state="pull"] .sens{color:rgba(32,18,12,.66)}
+  body[data-state="pull"] .primary{background:#20120C;color:var(--pull)}
+  body[data-state="pull"] .status{animation:flash 1s steps(1) infinite}
+  @keyframes flash{50%{opacity:.25}}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+  @media (max-height:620px){
+    canvas{height:96px}
+    .status{margin-top:14px}
+  }
+</style>
+</head>
+<body data-state="idle" data-mode="mic" data-run="off">
+
+<div id="app">
+
+  <div class="rail">
+    <span class="wordmark">Popwatch</span>
+    <div class="modes" role="group" aria-label="Input">
+      <button id="mMic" aria-pressed="true"><span>Mic</span></button>
+      <button id="mTap" aria-pressed="false"><span>Tap</span></button>
+    </div>
+  </div>
+
+  <div class="readout">
+    <div class="count" id="count">0</div>
+    <div class="unit" id="unit">pops · last 3 seconds</div>
+    <div class="status" id="status">Ready</div>
+    <p class="hint" id="hint">Oil, three kernels, lid on. Start this when the rest of the corn goes in.</p>
+  </div>
+
+  <div class="curve">
+    <canvas id="curve" aria-hidden="true"></canvas>
+    <div class="axis">
+      <span>Elapsed <b id="elapsed">0:00</b></span>
+      <span>Peak <b id="peak">0</b></span>
+      <span>Total <b id="total">0</b></span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="tapzone" id="tapzone">Tap here on every pop</button>
+    <label class="sens">Sensitivity
+      <input id="sens" type="range" min="1.4" max="5" step="0.1" value="2.6">
+    </label>
+    <button class="primary" id="go">Start listening</button>
+    <div class="outcome" id="outcome" hidden>
+      <div class="oq">Kernels left
+        <span class="opts" id="oKern">
+          <button data-v="none">None</button><button data-v="few">A few</button><button data-v="lots">A lot</button>
+        </span>
+      </div>
+      <div class="oq">Scorched
+        <span class="opts" id="oScorch">
+          <button data-v="no">No</button><button data-v="yes">Yes</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="tools">
+      <button class="tool" id="skip" hidden>Skip</button>
+      <button class="tool" id="shake" hidden>Shake</button>
+      <button class="tool" id="oSkip" hidden>Skip logging</button>
+      <a class="tool" id="dl" download="popwatch-run.webm" hidden>Save recording</a>
+      <button class="tool" id="load">Replay a file</button>
+      <input id="file" type="file" accept="audio/*" hidden>
+    </div>
+
+    <details class="log" id="logbox" hidden>
+      <summary>Run log · <span id="logn">0</span></summary>
+      <div class="logwrap"><table id="logtable"></table></div>
+      <button class="tool" id="logclear">Clear log</button>
+    </details>
+
+    <p class="note" id="note" hidden></p>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var WINDOW_MS   = 3000;   // trailing window the big number counts over
+  var SAMPLE_MS   = 250;    // how often we log a point on the curve
+  var REFRACTORY  = 60;     // ms of deafness after a pop, so one pop isn't three
+  var PULL_FRAC   = 0.15;   // pull when rate falls under this share of peak
+  var SLOW_FRAC   = 0.40;   // "slowing" warning band
+  var GAP_MS      = 4000;   // backstop: this much silence and it's done
+  var MIN_POPS    = 20;     // never call it before this many pops
+  var MIN_RUN_MS  = 25000;  // never call it in the first 25 seconds
+  var PEAK_HOLD   = 8000;   // peak must be this old before we trust a decline
+
+  var FLUX_WIN    = 120;    // frames in the rolling threshold window
+  var FLUX_MIN    = 40;     // frames before the threshold is worth trusting
+  var FLOOR       = 12;     // absolute flux floor; nothing below this is a pop
+  var HOP_MS      = 1000/60;// replay samples the analyser at the live rAF cadence
+  var SWEEP_K     = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 14];
+
+  var TEST_KERNELS = 3;     // phase 1: kernels in the oil to prove temperature
+  var REST_MS      = 30000; // phase 2: off-heat rest, lid on
+
+  // PROVISIONAL — not measured. Replace from the "first three pops" block that
+  // every replay prints. See the note at the bottom of this file.
+  var DUD_MS       = 20000; // phase 1: give up on the third kernel this long
+                            // after the second, and call it a dud
+
+  // Deaf guards. These do not time a distribution, they detect *zero signal*,
+  // so they are deliberately loose outer bounds rather than tuned values:
+  // firing late costs nothing, firing early would cry wolf on a slow stove.
+  var DEAF_TEST_MS = 240000; // phase 1: not one kernel in four minutes
+  var DEAF_MAIN_MS = 180000; // phase 3: armed three minutes, heard nothing
+
+  var LOG_KEY      = "popwatch.runs";
+  var SHAKE_TOL    = 400;   // ms either side of a shake mark counts as "at" it
+
+  var $ = function(id){ return document.getElementById(id); };
+  var body = document.body;
+  var elCount = $("count"), elStatus = $("status"), elHint = $("hint"),
+      elElapsed = $("elapsed"), elPeak = $("peak"), elTotal = $("total"),
+      elGo = $("go"), elNote = $("note"), elSens = $("sens"),
+      elTap = $("tapzone"), elMic = $("mMic"), elTapMode = $("mTap"),
+      elDl = $("dl"), elLoad = $("load"), elFile = $("file"),
+      elUnit = $("unit"), elSkip = $("skip"), elShake = $("shake"),
+      elOutcome = $("outcome"), elOKern = $("oKern"), elOScorch = $("oScorch"),
+      elOSkip = $("oSkip"), elLogBox = $("logbox"), elLogN = $("logn"),
+      elLogTable = $("logtable"), elLogClear = $("logclear");
+
+  var cv = $("curve"), ctx = cv.getContext("2d");
+
+  var mode = "mic";
+  var running = false;
+  var state = "idle";
+  var phase = "idle";     // idle | test | rest | main
+  var pops = [];          // timestamps, reset per phase
+  var popD = [];          // {f, thr} behind each pop, same indices as pops
+  var series = [];        // {t, rate}
+  var t0 = 0, peakRate = 0, peakAt = 0, lastPop = 0, lastSample = 0, lastBeat = 0;
+  var pullAt = null;      // ms into the phase when the rule fired
+  var sessionT0 = 0;      // when the recording started, so marks are file-relative
+  var shakes = [];        // ms from sessionT0, one per Shake tap
+  var dud = false;        // phase 1 ended on the timeout, not on a third kernel
+
+  var audio = null, stream = null, analyser = null, raf = 0;
+  var wakeLock = null;
+  var rec = null, chunks = [], dlUrl = null;
+
+  // detector state, split so replay can reuse the decision half on its own
+  var band = null, prev = null;   // extraction
+  var flux = [], gate = 0;        // decision
+  function resetExtract(){ band = null; prev = null; }
+  function resetDecide(){ flux = []; gate = 0; }
+
+  // one clock for everything; replay swaps in a virtual one
+  var realClock = function(){ return performance.now(); };
+  var vt = 0, replaying = false;
+  var clock = realClock;
+
+  function mmss(ms){
+    var s = Math.floor(ms / 1000);
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }
+
+  /* ---------- canvas ---------- */
+  function fit(){
+    var r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    cv.width = Math.round(r.width * d);
+    cv.height = Math.round(r.height * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    draw();
+  }
+  window.addEventListener("resize", fit);
+
+  function css(name){
+    return getComputedStyle(body).getPropertyValue(name).trim();
+  }
+
+  function draw(){
+    var w = cv.clientWidth, h = cv.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    if(!series.length){ return; }
+
+    var ink = css("--ink"), accent = css("--accent"), steam = css("--steam");
+    var top = Math.max(peakRate, 1) * 1.15;
+    var n = series.length;
+    var barW = Math.max(1.5, Math.min(6, w / Math.max(n, 60)));
+    var step = w / Math.max(n, 60);
+
+    // threshold line: the moment the rule fires
+    var y = h - (peakRate * PULL_FRAC / top) * h;
+    ctx.strokeStyle = accent;
+    ctx.globalAlpha = .5;
+    ctx.setLineDash([2, 5]);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    for(var i = 0; i < n; i++){
+      var v = series[i].rate;
+      var bh = Math.max(v > 0 ? 2 : 0, (v / top) * h);
+      var x = i * step;
+      var isPeak = series[i].t === peakAt && v === peakRate;
+      ctx.fillStyle = isPeak ? accent : ink;
+      ctx.globalAlpha = isPeak ? 1 : .42;
+      ctx.fillRect(x, h - bh, barW, bh);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- the rule engine ---------- */
+  function rateNow(now){
+    var cut = now - WINDOW_MS, c = 0;
+    for(var i = pops.length - 1; i >= 0; i--){
+      if(pops[i] >= cut) c++; else break;
+    }
+    return c;
+  }
+
+  function setState(s){
+    if(s === state) return;
+    state = s;
+    body.dataset.state = s;
+    if(s === "pull"){
+      pullAt = clock() - t0;
+      if(!replaying) alarm();
+    }
+    if(s === "deaf" && !replaying) chime(190, 3, 420, 0.30);
+    draw();
+  }
+
+  function pop(now, f, thr){
+    pops.push(now);
+    popD.push({f: f || 0, thr: thr || 0});
+    // a pop also clears "deaf": whatever was wrong, it is hearing now
+    if(state === "idle" || state === "listening" || state === "deaf") setState("popping");
+    lastPop = now;
+    if(!replaying && now - lastBeat > 90){
+      lastBeat = now;
+      elCount.classList.remove("beat");
+      void elCount.offsetWidth;   // forces a reflow, so skipped during replay
+      elCount.classList.add("beat");
+    }
+  }
+
+  /* ---------- phases ----------
+     Phase 1 and phase 3 run the same detector against the same pops array;
+     only the exit condition below differs. Phase 2 listens to nothing. */
+
+  function setPhase(p){
+    phase = p;
+    body.dataset.phase = p;
+    resetRun();
+    resetDecide();             // the noise floor is different in each phase
+    if(p === "test"){
+      elUnit.textContent = "test kernels heard";
+      setState("listening");
+    } else if(p === "rest"){
+      elUnit.textContent = "seconds resting";
+      setState("listening");
+    } else if(p === "main"){
+      elUnit.textContent = "pops · last 3 seconds";
+      setState("listening");
+    }
+    elSkip.hidden = !(running && (p === "test" || p === "rest"));
+    elSkip.textContent = p === "test" ? "Skip to rest" : "Skip to heat";
+    elShake.hidden = !(running && p === "main");
+    if(!replaying) draw();
+  }
+
+  function toRest(wasDud){
+    dud = wasDud;
+    if(!replaying) chime(wasDud ? 440 : 660, 2, 260, 0.22);
+    setPhase("rest");
+  }
+
+  function toMain(){
+    if(!replaying) chime(880, 4, 300, 0.30);   // the one nobody is looking at
+    if(!replaying && navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]);
+    setPhase("main");
+  }
+
+  function testTick(now, elapsed){
+    elCount.textContent = pops.length;
+    elTotal.textContent = pops.length;
+    if(pops.length >= TEST_KERNELS){ toRest(false); return; }
+    // a low-moisture kernel may never pop, and waiting costs the oil
+    if(pops.length === TEST_KERNELS - 1 && now - lastPop >= DUD_MS){ toRest(true); return; }
+    if(pops.length === 0 && elapsed >= DEAF_TEST_MS) setState("deaf");
+    words(pops.length, elapsed);
+  }
+
+  function restTick(now, elapsed){
+    var left = Math.max(0, REST_MS - elapsed);
+    elCount.textContent = Math.ceil(left / 1000);
+    if(left <= 0){ toMain(); return; }
+    words(0, elapsed);
+  }
+
+  function mainTick(now, elapsed){
+    var rate = rateNow(now);
+    elCount.textContent = rate;
+    elTotal.textContent = pops.length;
+
+    if(rate > peakRate && pops.length >= 8){
+      peakRate = rate; peakAt = now; elPeak.textContent = rate;
+    }
+
+    if(now - lastSample >= SAMPLE_MS){
+      lastSample = now;
+      series.push({t: now, rate: rate});
+      if(series.length > 900) series.shift();
+      if(!replaying) draw();   // replay draws once at the end instead
+    }
+
+    // armed this long having heard nothing at all is not a quiet batch,
+    // it is a detector that is not working. Say so rather than sit in Listening.
+    if(pops.length === 0 && elapsed >= DEAF_MAIN_MS) setState("deaf");
+
+    if(state !== "pull"){
+      var eligible = pops.length >= MIN_POPS &&
+                     elapsed >= MIN_RUN_MS &&
+                     peakRate > 0 &&
+                     (now - peakAt) >= PEAK_HOLD;
+
+      if(eligible && (rate <= peakRate * PULL_FRAC || (now - lastPop) >= GAP_MS)){
+        setState("pull");
+      } else if(eligible && rate <= peakRate * SLOW_FRAC){
+        setState("slowing");
+      } else if(pops.length > 0 && state !== "popping" && rate > peakRate * SLOW_FRAC){
+        setState("popping");
+      }
+    }
+
+    words(rate, elapsed);
+  }
+
+  function tick(){
+    var now = clock(), elapsed = now - t0;
+    elElapsed.textContent = mmss(elapsed);
+    if(phase === "test") testTick(now, elapsed);
+    else if(phase === "rest") restTick(now, elapsed);
+    else mainTick(now, elapsed);
+  }
+
+  function loopTick(){
+    if(!running) return;
+    tick();
+    setTimeout(loopTick, 100);
+  }
+
+  function words(rate, elapsed){
+    if(state === "deaf"){
+      elStatus.textContent = "Not hearing anything";
+      elHint.textContent = "Nothing at all in " + Math.round(elapsed / 1000) + " seconds. That is a broken "
+        + "detector, not a quiet pot — check the mic permission, the distance, the extractor fan. "
+        + "Watch the pot yourself until this number moves.";
+      return;
+    }
+    if(phase === "test"){
+      elStatus.textContent = rate ? rate + " of 3" : "Test kernels";
+      elHint.textContent = "Three kernels in the oil, lid on, heat up. When all three have popped the oil is at temperature.";
+      return;
+    }
+    if(phase === "rest"){
+      elStatus.textContent = "Resting";
+      elHint.textContent = dud
+        ? "Third kernel was a dud — two is enough. Off the heat, corn in, lid on. Back on the heat at zero."
+        : "Off the heat, corn in, lid on. Back on the heat at zero.";
+      return;
+    }
+    if(state === "pull"){
+      elStatus.textContent = "Pull the pot";
+      elHint.textContent = "Off the heat, lid off, tip it out. Stragglers cost you nothing; scorch costs you the batch.";
+    } else if(state === "slowing"){
+      elStatus.textContent = "Slowing";
+      elHint.textContent = "Past the peak. Keep shaking, get the bowl ready.";
+    } else if(state === "popping"){
+      elStatus.textContent = "Popping";
+      elHint.textContent = "Lid cracked a finger's width to let the steam out. Shake every 15 seconds.";
+    } else {
+      elStatus.textContent = "Listening";
+      elHint.textContent = mode === "mic"
+        ? "Nothing yet. First pops usually land 60 to 90 seconds in."
+        : "Nothing yet. Tap the panel below on every pop you hear.";
+    }
+  }
+
+  /* ---------- the detector ----------
+     Two halves, both shared verbatim by the live mic and by replay:
+       fluxOf()  analyser bins  ->  one spectral-flux number
+       decide()  that number    ->  pop() or not
+     Replay records fluxOf's output once and re-runs decide() per k. */
+
+  // spectral flux over 2-8 kHz: sum of positive frame-to-frame change
+  function fluxOf(bins, nyquist){
+    if(!band){
+      var hz = nyquist / bins.length;
+      band = [Math.floor(2000 / hz), Math.min(bins.length - 1, Math.floor(8000 / hz))];
+    }
+    if(!prev){ prev = bins.slice(); return null; }
+    var f = 0;
+    for(var i = band[0]; i <= band[1]; i++){
+      var d = bins[i] - prev[i];
+      if(d > 0) f += d;
+    }
+    prev = bins.slice();
+    return f;
+  }
+
+  function median(a){
+    var s = a.slice().sort(function(x, y){ return x - y; }), n = s.length;
+    return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  }
+
+  // median + k * 1.4826 * MAD. Unlike mean/sd, dense popping doesn't drag the
+  // threshold up with it, so the peak stays measurable.
+  function threshold(buf, k){
+    var m = median(buf), d = new Array(buf.length);
+    for(var i = 0; i < buf.length; i++) d[i] = Math.abs(buf[i] - m);
+    return m + k * 1.4826 * median(d);
+  }
+
+  function decide(f, now, k){
+    flux.push(f);
+    if(flux.length > FLUX_WIN) flux.shift();
+    if(flux.length <= FLUX_MIN) return;
+    var thr = threshold(flux, k);
+    if(f > thr && f > FLOOR && now - gate > REFRACTORY){
+      gate = now;
+      pop(now, f, thr);
+    }
+  }
+
+  /* ---------- live mic ---------- */
+  function listen(){
+    var bins = new Uint8Array(analyser.frequencyBinCount);
+    var nyquist = audio.sampleRate / 2;
+    function loop(){
+      raf = requestAnimationFrame(loop);
+      analyser.getByteFrequencyData(bins);
+      var f = fluxOf(bins, nyquist);
+      if(f !== null) decide(f, performance.now(), parseFloat(elSens.value));
+    }
+    loop();
+  }
+
+  /* ---------- replay ----------
+     Renders the file through a real AnalyserNode offline (much faster than
+     real time), sampled at the same cadence rAF gives the live path, then
+     drives the same decide() + tick() the mic drives. */
+
+  async function framesFrom(buf){
+    var oc = new OfflineAudioContext(1, buf.length, buf.sampleRate);
+    var src = oc.createBufferSource(); src.buffer = buf;
+    var an = oc.createAnalyser();
+    an.fftSize = 1024;
+    an.smoothingTimeConstant = 0;
+    // ponytail: ScriptProcessor is deprecated but it's the only thing that can
+    // read an AnalyserNode mid-render offline. Move to an AudioWorklet (Blob
+    // URL, still one file) if a browser drops it.
+    var sp = oc.createScriptProcessor(256, 1, 1);
+    src.connect(an); an.connect(sp); sp.connect(oc.destination);
+
+    var frames = [], bins = new Uint8Array(an.frequencyBinCount);
+    var step = 256 / buf.sampleRate * 1000, t = 0, acc = 0;
+    resetExtract();
+    sp.onaudioprocess = function(){
+      t += step; acc += step;
+      if(acc < HOP_MS) return;
+      acc -= HOP_MS;
+      an.getByteFrequencyData(bins);
+      var f = fluxOf(bins, oc.sampleRate / 2);
+      if(f !== null) frames.push({t: t, f: f});
+    };
+    src.start();
+    await oc.startRendering();
+    return frames;
+  }
+
+  // Push a recorded flux series through the live decision + rule engine.
+  function runFlux(frames, k){
+    replaying = true;
+    vt = 0;
+    clock = function(){ return vt; };
+    var wasPhase = phase;
+    phase = "main";         // replay measures the detector and the stopping rule;
+    resetRun();             // the phase sequencer is a live-procedure layer above it
+    resetDecide();
+
+    try{
+      var nextTick = 0;
+      for(var i = 0; i < frames.length; i++){
+        vt = frames[i].t;
+        decide(frames[i].f, vt, k);
+        while(vt >= nextTick){ nextTick += 100; tick(); }
+      }
+      tick();
+      return {pops: pops.length, peak: peakRate, pull: pullAt,
+              times: pops.slice(), detail: popD.slice()};
+    } finally {
+      clock = realClock;    // never leave the virtual clock installed
+      replaying = false;
+      phase = wasPhase;
+    }
+  }
+
+  // How far apart are the first three pops? That spread is what DUD_MS has to
+  // cover, and it is the only honest way to pick it.
+  function firstPops(r){
+    var lines = ["", "First pops — what DUD_MS has to cover"];
+    if(!r.times.length){ return lines.concat("  none detected").join("\n"); }
+    for(var i = 0; i < Math.min(5, r.times.length); i++){
+      var d = r.detail[i];
+      lines.push("  #" + (i + 1) + "  " + mmss(r.times[i]) +
+        (i ? "  +" + ((r.times[i] - r.times[i - 1]) / 1000).toFixed(1) + "s" : "       ") +
+        "   flux " + pad(Math.round(d.f), 4) + "  thr " + pad(Math.round(d.thr), 4) +
+        "  floor " + FLOOR);
+    }
+    if(r.times.length >= 3){
+      lines.push("  1st->3rd " + ((r.times[2] - r.times[0]) / 1000).toFixed(1) +
+                 "s   2nd->3rd " + ((r.times[2] - r.times[1]) / 1000).toFixed(1) + "s");
+    }
+    lines.push("  flux vs thr is the margin k controls; flux vs floor is");
+    lines.push("  the fixed gate, and the one likelier to reject quiet oil.");
+    return lines.join("\n");
+  }
+
+  // Section 3: with shake marks from a logged run, are detections landing on
+  // them more often than chance? A control recording of shaking an empty pot
+  // needs no marks at all — there, every detection is a false positive.
+  function shakeCheck(r, durMs){
+    var runs = loadLog().filter(function(x){
+      return x.shakes && x.shakes.length && Math.max.apply(null, x.shakes) < durMs;
+    });
+    if(!runs.length) return "";
+    var marks = runs[runs.length - 1].shakes;
+    var near = 0;
+    r.times.forEach(function(t){
+      for(var i = 0; i < marks.length; i++){
+        if(Math.abs(t - marks[i]) <= SHAKE_TOL){ near++; return; }
+      }
+    });
+    var covered = Math.min(1, marks.length * 2 * SHAKE_TOL / durMs);
+    var chance = r.times.length * covered;
+    return "\n\nShake check · " + marks.length + " marks from the last logged run" +
+      "\n  detections within " + SHAKE_TOL + "ms of a shake: " + near + " of " + r.times.length +
+      "\n  expected if shakes were irrelevant:  " + chance.toFixed(1) +
+      "\n  ratio " + (chance > 0 ? (near / chance).toFixed(1) : "—") +
+      "x — near 1.0 means shakes are not being counted.";
+  }
+
+  function pad(v, n){
+    v = String(v);
+    while(v.length < n) v = " " + v;
+    return v;
+  }
+
+  async function replay(file){
+    if(running) return;
+    note("Decoding " + file.name + "…");
+    var frames;
+    try{
+      var ac = new (window.AudioContext || window.webkitAudioContext)();
+      var buf = await ac.decodeAudioData(await file.arrayBuffer());
+      try{ ac.close(); }catch(e){}
+      frames = await framesFrom(buf);
+    }catch(err){
+      note("Could not replay that file: " + err.message);
+      return;
+    }
+    if(frames.length < FLUX_MIN * 2){
+      note("Replay produced almost no frames — this browser won't run the analyser offline. Try Chrome.");
+      return;
+    }
+
+    var cur = parseFloat(elSens.value);
+    var ks = SWEEP_K.slice();
+    if(ks.indexOf(cur) < 0){ ks.push(cur); ks.sort(function(a, b){ return a - b; }); }
+
+    var lines = [
+      "Replay · " + mmss(frames[frames.length - 1].t) + " audio · " + frames.length + " frames",
+      "    k   pops   peak   pull"
+    ];
+    ks.forEach(function(k){
+      var r = runFlux(frames, k);
+      lines.push((k === cur ? "* " : "  ") + pad(k.toFixed(1), 4) +
+                 pad(r.pops, 7) + pad(r.peak, 7) +
+                 "   " + (r.pull == null ? "—" : mmss(r.pull)));
+    });
+
+    var r = runFlux(frames, cur);   // leave the display showing the slider's k
+    draw();
+    note(lines.join("\n") +
+      "\nk is usable where pops plateau: far below that it is\ncounting the noise floor, far above it misses the peak." +
+      "\n" + firstPops(r) +
+      shakeCheck(r, frames[frames.length - 1].t));
+  }
+
+  // Each transition gets its own signature, because phase 2 ends with nobody
+  // looking at the screen.
+  function chime(freq, count, gap, vol){
+    try{
+      var o = audio ? audio : new (window.AudioContext || window.webkitAudioContext)();
+      for(var i = 0; i < count; i++){
+        var osc = o.createOscillator(), g = o.createGain();
+        osc.type = "square"; osc.frequency.value = freq;
+        g.gain.value = 0.0001;
+        osc.connect(g); g.connect(o.destination);
+        var t = o.currentTime + i * gap / 1000;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + gap / 1000 * 0.6);
+        osc.start(t); osc.stop(t + gap / 1000 * 0.7);
+      }
+    }catch(e){}
+  }
+
+  function alarm(){
+    chime(880, 3, 260, 0.18);
+    if(navigator.vibrate) navigator.vibrate([180, 90, 180, 90, 320]);
+  }
+
+  /* ---------- screen ---------- */
+  async function holdScreen(){
+    if(!navigator.wakeLock || wakeLock) return;
+    try{
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", function(){ wakeLock = null; });
+    }catch(e){ wakeLock = null; }
+  }
+
+  document.addEventListener("visibilitychange", function(){
+    if(running && document.visibilityState === "visible") holdScreen();
+  });
+
+  /* ---------- run control ---------- */
+  function note(msg){
+    if(!msg){ elNote.hidden = true; return; }
+    elNote.hidden = false;
+    elNote.textContent = msg;
+  }
+
+  /* ---------- run log ----------
+     Data collection only. Nothing here feeds back into the detector or the
+     stopping rule; PULL_FRAC is stored per run so that when there is enough
+     evidence to move it, the old runs are still interpretable. */
+
+  function loadLog(){
+    try{ return JSON.parse(localStorage.getItem(LOG_KEY)) || []; }catch(e){ return []; }
+  }
+  function saveLog(a){
+    try{ localStorage.setItem(LOG_KEY, JSON.stringify(a.slice(-100))); }catch(e){}
+  }
+
+  function renderLog(){
+    var runs = loadLog();
+    elLogBox.hidden = !runs.length;
+    elLogN.textContent = runs.length;
+    var rows = ["<tr><th>when</th><th>k</th><th>frac</th><th>peak</th><th>pops</th><th>pull</th><th>left</th><th>burnt</th></tr>"];
+    runs.slice().reverse().forEach(function(r){
+      rows.push("<tr><td>" + new Date(r.t).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}) +
+        "</td><td>" + r.k.toFixed(1) +
+        "</td><td>" + r.pullFrac +
+        "</td><td>" + r.peak +
+        "</td><td>" + r.total +
+        "</td><td>" + (r.pullMs == null ? "—" : mmss(r.pullMs)) +
+        "</td><td>" + (r.kernels || "—") +
+        "</td><td>" + (r.scorched || "—") + "</td></tr>");
+    });
+    elLogTable.innerHTML = rows.join("");
+  }
+
+  function logRun(){
+    var runs = loadLog();
+    runs.push({
+      t: Date.now(),
+      k: parseFloat(elSens.value),
+      pullFrac: PULL_FRAC,
+      peak: peakRate,
+      total: pops.length,
+      pullMs: pullAt,
+      runMs: Math.round(clock() - t0),
+      mode: mode,
+      dud: dud,
+      shakes: shakes.slice(),
+      kernels: null,
+      scorched: null
+    });
+    saveLog(runs);
+    renderLog();
+  }
+
+  // patch the run we just saved; both taps are optional and independent
+  function logOutcome(field, value){
+    var runs = loadLog();
+    if(!runs.length) return;
+    runs[runs.length - 1][field] = value;
+    saveLog(runs);
+    renderLog();
+    var done = runs[runs.length - 1].kernels && runs[runs.length - 1].scorched;
+    if(done) setTimeout(hideOutcome, 400);
+  }
+
+  function showOutcome(){
+    [elOKern, elOScorch].forEach(function(g){
+      Array.prototype.forEach.call(g.children, function(b){ b.setAttribute("aria-pressed", "false"); });
+    });
+    elOutcome.hidden = false;
+    elOSkip.hidden = false;
+  }
+  function hideOutcome(){
+    elOutcome.hidden = true;
+    elOSkip.hidden = true;
+  }
+
+  function resetRun(){
+    pops = []; popD = []; series = [];
+    peakRate = 0; peakAt = 0; lastPop = 0; lastBeat = 0; pullAt = null;
+    t0 = clock(); lastSample = t0;
+    state = "idle"; body.dataset.state = "idle";
+    elPeak.textContent = "0"; elTotal.textContent = "0"; elCount.textContent = "0";
+    elElapsed.textContent = "0:00";
+  }
+
+  function offerDownload(blob){
+    if(dlUrl) URL.revokeObjectURL(dlUrl);
+    dlUrl = URL.createObjectURL(blob);
+    elDl.href = dlUrl;
+    elDl.download = "popwatch-run." + (blob.type.indexOf("mp4") >= 0 ? "m4a" : "webm");
+    elDl.hidden = false;
+  }
+
+  async function start(){
+    resetRun(); resetExtract(); resetDecide();
+    elDl.hidden = true;
+    hideOutcome();
+    shakes = []; dud = false; sessionT0 = 0;
+
+    if(mode === "mic"){
+      try{
+        audio = new (window.AudioContext || window.webkitAudioContext)();
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+        var src = audio.createMediaStreamSource(stream);
+        analyser = audio.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0;
+        src.connect(analyser);
+        await audio.resume();
+        note("");
+
+        chunks = [];
+        try{
+          var r = new MediaRecorder(stream);
+          r.ondataavailable = function(e){ if(e.data.size) chunks.push(e.data); };
+          r.onstop = function(){
+            offerDownload(new Blob(chunks, {type: r.mimeType || "audio/webm"}));
+          };
+          r.start();
+          rec = r;
+        }catch(e){ rec = null; }
+
+        listen();
+        sessionT0 = clock();   // shake marks are stored relative to the file
+      }catch(err){
+        note("No microphone here — the page needs HTTPS and mic permission. Switch to Tap and it works the same way.");
+        setMode("tap");
+        audio = null;
+      }
+    }
+
+    await holdScreen();
+
+    running = true;
+    body.dataset.run = "on";
+    if(!sessionT0) sessionT0 = clock();
+    elGo.textContent = "Stop";
+    setPhase("test");
+    loopTick();
+  }
+
+  function stop(){
+    running = false;
+    body.dataset.run = "off";
+    if(raf) cancelAnimationFrame(raf);
+    if(rec && rec.state !== "inactive"){ try{ rec.stop(); }catch(e){} }
+    rec = null;
+    if(stream) stream.getTracks().forEach(function(t){ t.stop(); });
+    if(audio && audio.state !== "closed"){ try{ audio.close(); }catch(e){} }
+    audio = null; stream = null; analyser = null;
+    if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; }
+
+    // a real batch happened: save it now, so skipping the outcome still records it
+    var real = phase === "main" && pops.length > 0;
+    if(real){ logRun(); showOutcome(); }
+
+    phase = "idle"; body.dataset.phase = "idle";
+    elSkip.hidden = true; elShake.hidden = true;
+    elUnit.textContent = "pops · last 3 seconds";
+    setState("idle");
+    elStatus.textContent = real ? "Done" : "Ready";
+    elHint.textContent = real
+      ? pops.length + " pops, peak " + peakRate + " per 3 seconds. How did it turn out?"
+      : "Oil, three kernels, lid on. Start this before the pan goes on the heat.";
+    elGo.textContent = "Start listening";
+  }
+
+  function setMode(m){
+    mode = m;
+    body.dataset.mode = m;
+    elMic.setAttribute("aria-pressed", m === "mic");
+    elTapMode.setAttribute("aria-pressed", m === "tap");
+    elGo.textContent = running ? "Stop" : (m === "mic" ? "Start listening" : "Start counting");
+  }
+
+  elGo.addEventListener("click", function(){ running ? stop() : start(); });
+  elMic.addEventListener("click", function(){ if(!running) setMode("mic"); });
+  elTapMode.addEventListener("click", function(){ if(!running) setMode("tap"); });
+  elTap.addEventListener("click", function(){ if(running && mode === "tap") pop(clock()); });
+  document.addEventListener("keydown", function(e){
+    if(e.code === "Space" && running && mode === "tap"){ e.preventDefault(); pop(clock()); }
+  });
+
+  elSkip.addEventListener("click", function(){
+    if(!running) return;
+    if(phase === "test") toRest(false);
+    else if(phase === "rest") toMain();
+  });
+
+  elShake.addEventListener("click", function(){
+    if(running && phase === "main") shakes.push(Math.round(clock() - sessionT0));
+  });
+
+  function optionGroup(el, field){
+    el.addEventListener("click", function(e){
+      var b = e.target.closest("button");
+      if(!b) return;
+      Array.prototype.forEach.call(el.children, function(x){
+        x.setAttribute("aria-pressed", String(x === b));
+      });
+      logOutcome(field, b.dataset.v);
+    });
+  }
+  optionGroup(elOKern, "kernels");
+  optionGroup(elOScorch, "scorched");
+  elOSkip.addEventListener("click", hideOutcome);
+  elLogClear.addEventListener("click", function(){
+    try{ localStorage.removeItem(LOG_KEY); }catch(e){}
+    renderLog();
+  });
+
+  elLoad.addEventListener("click", function(){ elFile.click(); });
+  elFile.addEventListener("change", function(){
+    var f = elFile.files[0];
+    elFile.value = "";
+    if(f) replay(f);
+  });
+
+  /* ---------- self-check: popwatch.html?selftest ---------- */
+  function selftest(){
+    var ok = function(c, m){ if(!c) throw new Error("selftest: " + m); };
+    var i, b = [];
+
+    // a window that is 40% pops: the threshold must stay near the floor
+    for(i = 0; i < 72; i++) b.push(10 + (i % 3) * 4);
+    for(i = 0; i < 48; i++) b.push(200 + (i % 7));
+    var t = threshold(b, 3);
+    var m = b.reduce(function(a, x){ return a + x; }, 0) / b.length;
+    var sd = Math.sqrt(b.reduce(function(a, x){ return a + (x - m) * (x - m); }, 0) / b.length);
+    ok(t < 100, "median/MAD threshold should sit near the floor, got " + t.toFixed(1));
+    ok(m + 3 * sd > t, "mean/sd should be the higher, pop-inflated threshold");
+
+    // end to end through decide() + tick(): floor of 8/13/18, a spike every 10th
+    var frames = [];
+    for(i = 0; i < 400; i++) frames.push({t: i * HOP_MS, f: (i > 60 && i % 10 === 0) ? 300 : 8 + (i % 3) * 5});
+    var r = runFlux(frames, 3);
+    ok(r.pops > 28 && r.pops < 38, "expected 33 spikes, got " + r.pops);
+
+    // --- phase machine, driven on the virtual clock like replay does ---
+    // A phase is stepped by moving the clock and calling tick(); no audio needed.
+    var log = [];
+    replaying = true;                       // keeps it silent and off the canvas
+    clock = function(){ return vt; };
+    try{
+      var at = function(ms){ vt = ms; tick(); };
+
+      // phase 1 reaches three kernels -> rest
+      vt = 0; phase = "test"; resetRun(); dud = false;
+      pop(1000); at(1100); pop(4000); at(4100); pop(7000); at(7100);
+      ok(phase === "rest", "three kernels should end phase 1, got " + phase);
+      ok(dud === false, "three kernels is not a dud");
+
+      // phase 2 runs REST_MS then hands over to phase 3
+      at(t0 + REST_MS - 500);
+      ok(phase === "rest", "rest should still be running 500ms early");
+      at(t0 + REST_MS + 10);
+      ok(phase === "main", "rest should end at REST_MS, got " + phase);
+
+      // phase 1 with a dud third kernel: two pops, then silence past DUD_MS
+      vt = 0; phase = "test"; resetRun(); dud = false;
+      pop(1000); at(1100); pop(4000); at(4100);
+      at(4000 + DUD_MS - 500);
+      ok(phase === "test", "must not give up on the third kernel early");
+      at(4000 + DUD_MS + 10);
+      ok(phase === "rest" && dud === true, "second pop + DUD_MS should call a dud");
+
+      // deaf guard, phase 1: silence all the way to DEAF_TEST_MS
+      vt = 0; phase = "test"; resetRun();
+      at(DEAF_TEST_MS - 1000);
+      ok(state !== "deaf", "deaf guard must not fire early");
+      at(DEAF_TEST_MS + 10);
+      ok(state === "deaf", "silent phase 1 must end in deaf, got " + state);
+      pop(DEAF_TEST_MS + 20); at(DEAF_TEST_MS + 30);
+      ok(state !== "deaf", "a pop must clear deaf");
+
+      // deaf guard, phase 3: armed, nothing heard
+      vt = 0; phase = "main"; resetRun();
+      at(DEAF_MAIN_MS - 1000);
+      ok(state !== "deaf", "phase 3 deaf guard must not fire early");
+      at(DEAF_MAIN_MS + 10);
+      ok(state === "deaf", "silent phase 3 must end in deaf, got " + state);
+      log.push("phases ok");
+    } finally {
+      clock = realClock; replaying = false;
+    }
+
+    phase = "idle"; body.dataset.phase = "idle";
+    setState("idle"); resetRun(); draw();
+    elStatus.textContent = "Ready";   // words() left the deaf copy on screen
+    elHint.textContent = "Oil, three kernels, lid on. Start this before the pan goes on the heat.";
+    console.log("selftest ok — mad " + t.toFixed(1) + " vs sd " + (m + 3 * sd).toFixed(1) +
+                ", replay " + r.pops + " pops, " + log.join(" "));
+  }
+
+  fit();
+  body.dataset.phase = "idle";
+  renderLog();
+  note("Mic mode needs HTTPS. Opened straight from a file, use Tap.");
+  if(location.search.indexOf("selftest") >= 0) selftest();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+Baseline from the original popwatch.html, before the redesign (2026-10-25).
+
+selftest:
+selftest ok — mad 53.6 vs sd 367.4, replay 33 pops, phases ok
+
+replay of tools/synth-batch.wav (python tools/synth-batch.py tools/synth-batch.wav, seed 7):
+Replay · 2:49 audio · 10198 frames
+    k   pops   peak   pull
+   1.0   1261     29   —
+   1.5    745     24   —
+   2.0    465     24   1:41
+   2.5    281     21   1:24
+*  2.6    260     21   0:40
+   3.0    203     21   1:24
+   4.0    153     20   1:24
+   5.0    145     19   1:24
+   6.0    141     18   1:24
+   8.0    129     18   1:24
+  10.0    120     16   1:24
+  14.0     94     12   1:24
+First pops: #1 0:00 flux 1240 thr 1203 | #2 0:01 +0.3s 1257/1142 | #3 0:03 +2.1s 1409/1186 | #4 0:05 +2.0s 1233/1214 | #5 0:09 +3.9s 1206/1190
+End display: total 260, peak 21, state pull
