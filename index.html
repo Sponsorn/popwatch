@@ -278,7 +278,19 @@
     color:var(--ink);background:transparent;
     border:1px solid rgba(154,139,124,.45);border-radius:4px;cursor:pointer;
   }
-  .tool[hidden]{display:none}
+  .tool[hidden],.toolgrid[hidden]{display:none}
+  .tool.demo{
+    width:100%;margin-top:20px;min-height:60px;padding:10px 14px;
+    flex-direction:column;gap:4px;font-size:12px;
+  }
+  .tool.demo span{font-weight:300;letter-spacing:.06em;text-transform:none;color:var(--steam)}
+
+  .demotag{display:none;padding:0 12px;min-height:40px;align-items:center;
+    border:1px dashed currentColor;border-radius:3px;color:var(--ink)}
+  body[data-demo="on"] .demotag{display:flex}
+  body[data-demo="on"] .modes,
+  body[data-demo="on"] .tapzone{display:none}
+  body[data-mic="blocked"] .status{color:#C3CBD1}
   .tool:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
   .tool.quiet{border:0;min-height:40px;color:var(--steam);text-decoration:underline;text-underline-offset:4px}
 
@@ -431,6 +443,7 @@
     <div class="rail">
       <span class="wordmark">Pop<i>w</i>atch</span>
       <div class="railr">
+        <span class="demotag">Demo · 4×</span>
         <div class="modes" role="group" aria-label="Input">
           <button id="mMic" aria-pressed="true"><span>Mic</span></button>
           <button id="mTap" aria-pressed="false"><span>Tap</span></button>
@@ -480,6 +493,10 @@
     <div class="controls" id="controls">
       <button class="tapzone" id="tapzone">Tap here on every pop</button>
       <button class="primary" id="go">Start listening</button>
+      <div class="toolgrid" id="fallback" hidden>
+        <button class="tool" id="useTap">Count by tap</button>
+        <button class="tool" data-demo>Watch a demo</button>
+      </div>
       <div class="outcome" id="outcome" hidden>
         <div class="oq">Kernels left
           <span class="opts" id="oKern">
@@ -505,6 +522,7 @@
             <button class="tool" id="skip" hidden>Skip</button>
             <button class="tool" id="shake" hidden>Shake</button>
             <button class="tool" id="load">Replay a file</button>
+            <button class="tool" data-demo>Demo batch</button>
             <a class="tool" id="dl" download="popwatch-run.webm" hidden>Save recording</a>
             <input id="file" type="file" accept="audio/*" hidden>
           </div>
@@ -539,6 +557,7 @@
       <svg id="aboutCurve" viewBox="0 0 320 120" aria-hidden="true"></svg>
       <figcaption>A typical batch. The dashed line is the pull threshold. The live curve draws over this while you cook.</figcaption>
     </figure>
+    <button class="tool demo" data-demo>Watch a demo batch<span>4× speed · about 40 s · no mic</span></button>
     <p class="by">Made by Anton Beckman · <a href="https://antonbeckman.se">antonbeckman.se</a></p>
   </section>
   <button class="primary gotit" id="gotit">Got it</button>
@@ -603,7 +622,8 @@
       elTrack = $("track"), elDots = $("dots"), elRing = $("ring"), elRestLeft = $("restLeft"),
       elBurst = $("burst"), elSensV = $("sensv"), elInfo = $("info"), elSheet = $("sheet"),
       elAbout = $("about"), elSide = $("side"), elToolPanel = $("toolpanel"),
-      elControls = $("controls"), elToolsBox = $("toolsbox");
+      elControls = $("controls"), elToolsBox = $("toolsbox"), elFallback = $("fallback"),
+      elApp = $("app");
 
   var cv = $("curve"), ctx = cv.getContext("2d");
 
@@ -1347,7 +1367,55 @@
     elDl.hidden = false;
   }
 
+  function ready(){
+    elStatus.textContent = "Ready";
+    elHint.textContent = "Oil and three kernels in the pot, lid on. Start before it goes on the heat.";
+    elGo.textContent = mode === "mic" ? "Start listening" : "Start counting";
+  }
+
+  function hideFallback(){
+    elFallback.hidden = true;
+    delete body.dataset.mic;
+  }
+
+  // No run starts without a mic: say why, and offer the way back in. A blocked
+  // permission can't be re-prompted from the page; only site settings undo it.
+  function micFailed(err){
+    if(stream) stream.getTracks().forEach(function(t){ t.stop(); });
+    if(audio && audio.state !== "closed"){ try{ audio.close(); }catch(e){} }
+    audio = null; stream = null; analyser = null;
+
+    var name = err && err.name;
+    var why = !window.isSecureContext || !navigator.mediaDevices
+        ? ["Mic needs HTTPS", "Open the https:// address, or count pops by tap."]
+      : name === "NotFoundError" ? ["No mic found", "This device has no microphone to listen with. Count pops by tap instead."]
+      : name === "NotReadableError" ? ["Mic is busy", "Another app is using the microphone. Close it and try again."]
+      : ["Mic blocked", "Popwatch needs the mic to hear pops. Allow it in this site's settings, behind the icon left of the address, then try again."];
+    elStatus.textContent = why[0];
+    elHint.textContent = why[1];
+    elGo.textContent = "Try the mic again";
+    body.dataset.mic = "blocked";
+    elFallback.hidden = false;
+
+    // closing the prompt is not blocking it: the next try asks again
+    if(name === "NotAllowedError" && navigator.permissions){
+      navigator.permissions.query({name: "microphone"}).then(function(p){
+        if(p.state === "prompt") elHint.textContent = "The mic prompt was closed. Try again and choose Allow.";
+      }).catch(function(){});
+    }
+  }
+
+  // unblocking in site settings takes effect without a reload
+  if(navigator.permissions){
+    navigator.permissions.query({name: "microphone"}).then(function(p){
+      p.addEventListener("change", function(){
+        if(p.state === "granted" && body.dataset.mic){ hideFallback(); ready(); }
+      });
+    }).catch(function(){});
+  }
+
   async function start(){
+    hideFallback();
     resetRun(); resetExtract(); resetDecide();
     elDl.hidden = true;
     hideOutcome();
@@ -1385,9 +1453,8 @@
         listen();
         sessionT0 = clock();   // shake marks are stored relative to the file
       }catch(err){
-        note("No microphone here — the page needs HTTPS and mic permission. Switch to Tap and it works the same way.");
-        setMode("tap");
-        audio = null;
+        micFailed(err);
+        return;
       }
     }
 
@@ -1413,19 +1480,64 @@
     if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; }
 
     // a real batch happened: save it now, so skipping the outcome still records it
-    var real = phase === "main" && pops.length > 0;
+    var real = phase === "main" && pops.length > 0 && !demoOn;
     if(real){ logRun(); showOutcome(); }
+    if(demoOn) endDemo();
 
     phase = "idle"; body.dataset.phase = "idle";
     elSkip.hidden = true; elShake.hidden = true;
     elUnit.textContent = "pops · last 3 seconds";
     setState("idle");
-    elStatus.textContent = real ? "Done" : "Ready";
-    elHint.textContent = real
-      ? pops.length + " pops, peak " + peakRate + " per 3 seconds. How did it turn out?"
-      : "Oil and three kernels in the pot, lid on. Start before it goes on the heat.";
-    elGo.textContent = mode === "mic" ? "Start listening" : "Start counting";
+    ready();
+    if(real){
+      elStatus.textContent = "Done";
+      elHint.textContent = pops.length + " pops, peak " + peakRate + " per 3 seconds. How did it turn out?";
+    }
     ui();
+  }
+
+  /* ---------- demo batch ----------
+     A whole batch on a sped-up clock: the real phase machine, rule engine and
+     display, fed pops drawn from the expected curve. Never logged. */
+  var DEMO_SPEED = 4;
+  var DEMO_KERNELS = [4000, 9000, 13000];   // ms into phase 1
+  var demoOn = false, demoTimer = 0, demoAt = 0;
+
+  function startDemo(){
+    if(running) return;
+    if(elSheet.open) elSheet.close();
+    hideFallback(); hideOutcome(); note("");
+    var d0 = performance.now();
+    clock = function(){ return (performance.now() - d0) * DEMO_SPEED; };
+    demoOn = true; body.dataset.demo = "on";
+    resetRun(); resetDecide();
+    shakes = []; dud = false; demoAt = 0;
+    running = true; body.dataset.run = "on";
+    elGo.textContent = "Stop demo";
+    setPhase("test");
+    demoTimer = setInterval(feedDemo, 25);
+    loopTick();
+    elApp.scrollIntoView({block: "start"});
+  }
+
+  function feedDemo(){
+    var now = clock();
+    if(phase === "test"){
+      var k = DEMO_KERNELS[pops.length];
+      if(k != null && now - t0 >= k) pop(t0 + k);
+    } else if(phase === "main"){
+      if(demoAt < t0) demoAt = t0;
+      for(; demoAt < now; demoAt += 10){
+        if(Math.random() < expected(demoAt - t0, EXPECT_PEAK) * 9 * .01) pop(demoAt);   // ~27 per window at the peak
+      }
+    }
+  }
+
+  function endDemo(){
+    clearInterval(demoTimer);
+    clock = realClock;
+    demoOn = false;
+    delete body.dataset.demo;
   }
 
   function setMode(m){
@@ -1473,6 +1585,8 @@
   });
 
   elLoad.addEventListener("click", function(){ elFile.click(); });
+  document.querySelectorAll("[data-demo]").forEach(function(b){ b.addEventListener("click", startDemo); });
+  $("useTap").addEventListener("click", function(){ setMode("tap"); hideFallback(); ready(); });
   elFile.addEventListener("change", function(){
     var f = elFile.files[0];
     elFile.value = "";
@@ -1645,7 +1759,8 @@
   if(!window.isSecureContext) note("Mic mode needs HTTPS. Opened straight from a file, use Tap.");
   if(location.search.indexOf("selftest") >= 0) selftest();
   var demoState = (location.search.match(/demo=(\w+)/) || [])[1];
-  if(demoState) demo(demoState);
+  if(demoState === "run") startDemo();
+  else if(demoState) demo(demoState);
   ui();
 
   // first visit: explain before anything else (desktop shows it in the side column)
