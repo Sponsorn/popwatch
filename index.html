@@ -4,20 +4,49 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1B1512">
+<meta name="color-scheme" content="dark">
 <title>Popwatch</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Martian+Mono:wght@300;500;700&display=swap" rel="stylesheet">
+<meta name="description" content="A stovetop popcorn pop detector. It listens through your phone's mic and tells you when to take the pot off the heat.">
+<link rel="canonical" href="https://popwatch.antonbeckman.se/">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://popwatch.antonbeckman.se/">
+<meta property="og:title" content="Popwatch">
+<meta property="og:description" content="Listens to the pot and tells you when to pull it. Rate falls under 15% of peak, the pot comes off.">
+<meta property="og:image" content="https://popwatch.antonbeckman.se/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Popwatch mid-batch: a large live pop count over a rising pop-rate curve">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Popwatch">
+<meta name="twitter:description" content="Listens to the pot and tells you when to pull it.">
+<meta name="twitter:image" content="https://popwatch.antonbeckman.se/og-image.png">
+<link rel="preload" href="fonts/archivo-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face{
+    font-family:"Archivo";
+    src:url(fonts/archivo-latin-var.woff2) format("woff2");
+    font-weight:400 800;font-stretch:62% 125%;font-display:swap;
+  }
+  @font-face{
+    font-family:"Martian Mono";
+    src:url(fonts/martian-mono-latin-var.woff2) format("woff2");
+    font-weight:300 700;font-display:swap;
+  }
+
   :root{
     --scorch:#1B1512;
     --scorch-2:#241A15;
     --bone:#F2E8D5;
     --steam:#9A8B7C;
-    --cold:#2E5451;
+    --cold:#6A9E98;
     --kernel:#E8B31F;
     --pull:#EF5423;
+    --char:#1A0D07;
 
+    --heat:0;
     --field:var(--scorch);
     --ink:var(--bone);
     --accent:var(--cold);
@@ -28,122 +57,168 @@
 
   *{box-sizing:border-box;margin:0;padding:0}
 
-  html,body{height:100%}
+  html{min-height:100%;background:var(--scorch)}
 
   body{
+    min-height:100%;
     font-family:var(--display);
     background:var(--field);
     color:var(--ink);
     transition:background-color 900ms ease, color 400ms ease;
     -webkit-font-smoothing:antialiased;
-    overflow:hidden;
   }
 
-  #app{
-    height:100%;
-    max-width:560px;
-    margin:0 auto;
-    padding:max(18px,env(safe-area-inset-top)) 22px max(22px,env(safe-area-inset-bottom));
+  button{font:inherit;color:inherit}
+  a{color:inherit}
+
+  #app{max-width:560px;margin:0 auto}
+
+  .instrument{
+    min-height:100vh;min-height:100svh;
+    padding:max(14px,env(safe-area-inset-top)) 20px max(18px,env(safe-area-inset-bottom));
     display:grid;
-    grid-template-rows:auto 1fr auto auto;
-    gap:14px;
+    grid-template-rows:auto auto minmax(150px,1fr) auto auto;
+    gap:16px;
   }
 
   /* ---- top rail ---- */
   .rail{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    font-family:var(--mono);
-    font-size:11px;
-    font-weight:500;
-    letter-spacing:.16em;
-    text-transform:uppercase;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    font-family:var(--mono);font-size:11px;font-weight:500;
+    letter-spacing:.16em;text-transform:uppercase;
     color:var(--steam);
   }
-  .wordmark{color:var(--ink);opacity:.85}
+  .wordmark{
+    font-family:var(--display);font-size:17px;letter-spacing:.02em;text-transform:none;
+    font-variation-settings:"wdth" 125,"wght" 800;
+    color:var(--ink);
+  }
+  .wordmark i{font-style:normal;color:var(--kernel)}
+  .railr{display:flex;align-items:center;gap:8px}
 
-  .modes{display:flex;gap:0;border:1px solid currentColor;border-radius:2px;overflow:hidden}
+  .modes{display:flex;border:1px solid currentColor;border-radius:3px;overflow:hidden}
   .modes button{
     font:inherit;letter-spacing:.12em;text-transform:uppercase;
     background:transparent;color:inherit;border:0;
-    padding:6px 10px;cursor:pointer;
+    min-height:40px;padding:0 12px;cursor:pointer;
   }
   .modes button[aria-pressed="true"]{background:currentColor}
-  .modes button[aria-pressed="true"] span{color:var(--field);mix-blend-mode:normal}
+  .modes button[aria-pressed="true"] span{color:var(--field)}
   .modes button:focus-visible{outline:2px solid var(--kernel);outline-offset:-2px}
+
+  .info{
+    width:42px;height:42px;border-radius:50%;
+    border:1px solid currentColor;background:transparent;cursor:pointer;
+    font-family:var(--display);font-size:18px;font-variation-settings:"wdth" 100,"wght" 700;
+    text-transform:none;letter-spacing:0;
+  }
+  .info:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
 
   /* ---- the readout ---- */
   .readout{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    min-height:0;
+    display:flex;flex-direction:column;align-items:center;
+    text-align:center;padding-top:6px;
   }
+  .countwrap{position:relative}
 
   .count{
+    --wdth:100;
     font-family:var(--display);
-    font-variation-settings:"wdth" 112,"wght" 800;
-    font-size:clamp(96px,34vw,190px);
+    font-variation-settings:"wdth" var(--wdth),"wght" 800;
+    font-size:clamp(104px,38vw,200px);
     line-height:.82;
     letter-spacing:-.03em;
     font-variant-numeric:tabular-nums;
-    transition:color 400ms ease;
+    transition:color 400ms ease, font-variation-settings 600ms cubic-bezier(.2,.8,.2,1);
   }
   .count.beat{animation:beat 140ms ease-out}
   @keyframes beat{from{transform:scale(1.035)}to{transform:scale(1)}}
 
+  /* pop particles: a kernel leaves, a puff arrives */
+  .burst{position:absolute;left:50%;top:45%;width:0;height:0;pointer-events:none}
+  .burst i{
+    position:absolute;left:0;top:0;width:14px;height:14px;
+    border-radius:50%;background:var(--kernel);
+  }
+
   .unit{
-    font-family:var(--mono);
-    font-size:11px;font-weight:300;
+    font-family:var(--mono);font-size:11px;font-weight:300;
     letter-spacing:.22em;text-transform:uppercase;
-    color:var(--steam);
-    margin-top:16px;
+    color:var(--steam);margin-top:14px;
   }
 
   .status{
     font-family:var(--display);
-    font-variation-settings:"wdth" 100,"wght" 700;
-    font-size:clamp(20px,6.2vw,30px);
-    letter-spacing:.02em;
-    margin-top:22px;
+    font-variation-settings:"wdth" 110,"wght" 750;
+    font-size:clamp(22px,6.6vw,32px);
+    letter-spacing:.01em;line-height:1;
+    margin-top:18px;
     color:var(--accent);
     transition:color 400ms ease;
   }
   .hint{
-    font-family:var(--mono);
-    font-size:11px;font-weight:300;line-height:1.7;
-    letter-spacing:.04em;
-    color:var(--steam);
-    margin-top:10px;
-    max-width:34ch;
+    font-family:var(--mono);font-size:11px;font-weight:300;line-height:1.7;
+    letter-spacing:.03em;color:var(--steam);
+    margin-top:8px;max-width:36ch;min-height:1.7em;
   }
 
-  /* ---- the curve: signature element ---- */
-  .curve{position:relative}
-  canvas{display:block;width:100%;height:132px}
+  /* ---- the curve: expected shape first, the batch draws over it ---- */
+  .curve{position:relative;display:flex;flex-direction:column;min-height:0}
+  canvas{display:block;width:100%;flex:1 1 0;min-height:0}
   .axis{
     display:flex;justify-content:space-between;
     font-family:var(--mono);font-size:10px;font-weight:300;
     letter-spacing:.14em;text-transform:uppercase;
-    color:var(--steam);
-    margin-top:8px;
+    color:var(--steam);margin-top:8px;
   }
   .axis b{font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+
+  /* ---- phase track: the procedure the code is running ---- */
+  .track{
+    list-style:none;position:relative;
+    display:grid;grid-template-columns:repeat(4,1fr);
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.1em;text-transform:uppercase;
+  }
+  /* connectors run glyph edge to glyph edge, so nothing has to mask them */
+  .track li + li::before{
+    content:"";position:absolute;top:16px;height:1px;
+    left:calc(-50% + 34px);right:calc(50% + 34px);
+    background:var(--steam);opacity:.45;
+  }
+  .track li{
+    position:relative;display:flex;flex-direction:column;align-items:center;gap:7px;
+    color:var(--steam);opacity:.72;text-align:center;
+    transition:opacity 300ms ease,color 300ms ease;
+  }
+  .track li[data-s="done"]{opacity:.85}
+  .track li[data-s="now"]{opacity:1;color:var(--ink)}
+  .track li[data-s="now"] .glyph{color:var(--accent);border-color:var(--accent)}
+  .glyph{
+    height:32px;min-width:52px;padding:0 8px;
+    display:flex;align-items:center;justify-content:center;gap:5px;
+    border:1px solid transparent;border-radius:16px;
+  }
+  .dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor}
+  .dots i.on{background:var(--kernel);border-color:var(--kernel)}
+  .dots i.dud{border-style:dashed;opacity:.6}
+  .ring{width:24px;height:24px;transform:rotate(-90deg)}
+  .ring circle{fill:none;stroke-width:3}
+  .ring .bg{stroke:currentColor;opacity:.25}
+  .ring .fg{stroke:currentColor;stroke-dasharray:100;transition:stroke-dashoffset 200ms linear}
+  .glyph svg.hump{width:28px;height:18px}
+  .glyph .pulldot{width:12px;height:12px;border-radius:2px;background:var(--pull)}
+  .track b{font-weight:700;font-variant-numeric:tabular-nums}
 
   /* ---- controls ---- */
   .controls{display:grid;gap:12px}
 
   .primary{
     font-family:var(--display);
-    font-variation-settings:"wdth" 108,"wght" 700;
-    font-size:19px;
-    letter-spacing:.06em;
-    text-transform:uppercase;
-    padding:20px;
-    border:0;border-radius:3px;
+    font-variation-settings:"wdth" 112,"wght" 750;
+    font-size:21px;letter-spacing:.06em;text-transform:uppercase;
+    min-height:72px;padding:0 20px;
+    border:0;border-radius:6px;
     background:var(--ink);color:var(--field);
     cursor:pointer;
     transition:background-color 400ms ease,color 400ms ease;
@@ -153,24 +228,16 @@
 
   .tapzone{
     display:none;
-    padding:26px;border:1px dashed var(--steam);border-radius:3px;
+    min-height:120px;border:1px dashed var(--steam);border-radius:6px;
     background:transparent;color:var(--ink);
     font-family:var(--mono);font-size:12px;font-weight:500;
     letter-spacing:.16em;text-transform:uppercase;
     cursor:pointer;
-    user-select:none;-webkit-user-select:none;
+    user-select:none;-webkit-user-select:none;touch-action:manipulation;
   }
   body[data-mode="tap"][data-run="on"] .tapzone{display:block}
   .tapzone:active{background:rgba(242,232,213,.08)}
   .tapzone:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
-
-  .sens{
-    display:flex;align-items:center;gap:12px;
-    font-family:var(--mono);font-size:10px;font-weight:300;
-    letter-spacing:.14em;text-transform:uppercase;color:var(--steam);
-  }
-  body[data-mode="tap"] .sens{display:none}
-  .sens input{flex:1;accent-color:var(--kernel);min-width:0}
 
   .note{
     font-family:var(--mono);font-size:10px;font-weight:300;line-height:1.7;
@@ -180,15 +247,40 @@
   }
   .note[hidden]{display:none}
 
-  .tools{display:flex;gap:18px;justify-content:center}
-  .tool{
-    font-family:var(--mono);font-size:10px;font-weight:500;
+  /* ---- tools: everything secondary, behind one disclosure ---- */
+  .toolsbox{font-family:var(--mono);font-size:11px;color:var(--steam)}
+  .toolsbox > summary{
+    list-style:none;cursor:pointer;
+    min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;
+    letter-spacing:.16em;text-transform:uppercase;font-weight:500;
+  }
+  .toolsbox > summary::-webkit-details-marker{display:none}
+  .toolsbox > summary::after{content:"+";font-size:14px}
+  .toolsbox[open] > summary::after{content:"–"}
+  .toolsbox > summary:focus-visible{outline:2px solid var(--kernel);outline-offset:-2px}
+  .toolpanel{display:grid;gap:12px;padding:6px 0 4px}
+  .toolgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+  .sens{
+    display:flex;align-items:center;gap:12px;min-height:44px;
+    font-size:10px;font-weight:300;
     letter-spacing:.14em;text-transform:uppercase;
-    color:var(--steam);background:none;border:0;padding:4px 0;
-    text-decoration:underline;text-underline-offset:4px;cursor:pointer;
+  }
+  body[data-mode="tap"] .sens{display:none}
+  .sens input{flex:1;accent-color:var(--kernel);min-width:0;height:32px}
+  .sens output{color:var(--ink);font-weight:500;min-width:3ch;text-align:right}
+
+  .tool{
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    min-height:48px;padding:0 10px;
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.12em;text-transform:uppercase;text-decoration:none;
+    color:var(--ink);background:transparent;
+    border:1px solid rgba(154,139,124,.45);border-radius:4px;cursor:pointer;
   }
   .tool[hidden]{display:none}
   .tool:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
+  .tool.quiet{border:0;min-height:40px;color:var(--steam);text-decoration:underline;text-underline-offset:4px}
 
   /* ---- outcome prompt: two taps, filled in holding a hot pot ---- */
   .outcome{display:grid;gap:10px}
@@ -203,52 +295,130 @@
     font-family:var(--mono);font-size:11px;font-weight:500;
     letter-spacing:.1em;text-transform:uppercase;
     background:transparent;color:var(--ink);
-    border:1px solid var(--steam);border-radius:2px;
-    padding:12px 14px;min-width:56px;cursor:pointer;
+    border:1px solid var(--steam);border-radius:4px;
+    min-height:52px;padding:0 14px;min-width:60px;cursor:pointer;
   }
   .opts button[aria-pressed="true"]{background:var(--ink);color:var(--field);border-color:var(--ink)}
   .opts button:focus-visible{outline:2px solid var(--kernel);outline-offset:2px}
 
-  /* ---- run log: out of the way behind a native disclosure ---- */
+  /* ---- run log ---- */
   .log{font-family:var(--mono);font-size:10px;color:var(--steam)}
   .log summary{
     letter-spacing:.14em;text-transform:uppercase;cursor:pointer;
-    padding:4px 0;list-style:none;
+    min-height:40px;display:flex;align-items:center;list-style:none;
   }
   .log summary::-webkit-details-marker{display:none}
-  .log summary::before{content:"▸ ";}
-  .log[open] summary::before{content:"▾ ";}
-  .logwrap{overflow-x:auto;max-height:180px;overflow-y:auto;margin:6px 0}
+  .log summary::before{content:"▸ ";white-space:pre}
+  .log[open] summary::before{content:"▾ "}
+  .logwrap{overflow-x:auto;max-height:220px;overflow-y:auto;margin:6px 0}
   .log table{border-collapse:collapse;width:100%;font-size:10px;font-weight:300}
   .log th,.log td{text-align:right;padding:3px 6px;white-space:nowrap}
   .log th{color:var(--ink);font-weight:500;letter-spacing:.08em;position:sticky;top:0;background:var(--field)}
   .log td:first-child,.log th:first-child{text-align:left}
   .log tr+tr td{border-top:1px solid rgba(154,139,124,.18)}
 
+  /* ---- how it works ---- */
+  .about h2{
+    font-family:var(--display);font-size:30px;line-height:1;
+    font-variation-settings:"wdth" 125,"wght" 800;letter-spacing:-.01em;
+  }
+  .about ol{
+    list-style:none;counter-reset:s;display:grid;gap:12px;margin-top:18px;
+    font-family:var(--mono);font-size:12px;font-weight:300;line-height:1.7;color:var(--bone);
+  }
+  .about li{counter-increment:s;display:grid;grid-template-columns:2.2em 1fr}
+  .about li::before{content:counter(s,decimal-leading-zero);color:var(--kernel);font-weight:500}
+  .about figure{margin-top:20px}
+  .about svg{display:block;width:100%;height:auto}
+  .about figcaption{
+    font-family:var(--mono);font-size:10px;font-weight:300;line-height:1.7;
+    letter-spacing:.04em;color:var(--steam);margin-top:6px;
+  }
+  .about .by{
+    margin-top:22px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--steam);
+  }
+  .about .by a{color:var(--bone);text-underline-offset:4px}
+
+  dialog.sheet{
+    margin:auto 0 0;width:100%;max-width:100%;max-height:88vh;max-height:88svh;
+    border:0;border-radius:16px 16px 0 0;
+    padding:26px 22px max(22px,env(safe-area-inset-bottom));
+    background:var(--scorch-2);color:var(--bone);overflow-y:auto;
+  }
+  dialog.sheet::backdrop{background:rgba(10,7,5,.6)}
+  .sheet .close{
+    position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:50%;
+    border:1px solid rgba(154,139,124,.5);background:transparent;cursor:pointer;font-size:18px;
+  }
+  .sheet .gotit{width:100%;margin-top:22px;min-height:60px;font-size:17px;background:var(--bone);color:var(--scorch)}
+
+  .side:empty{display:none}
+  .side{transition:opacity 400ms ease}
+  /* when it is time to pull, nothing else on the page competes */
+  body[data-state="pull"] .side{opacity:.2}
+
   /* ---- state fields ---- */
-  body[data-state="popping"]{--field:#241A11;--accent:var(--kernel)}
+  /* popping warms with the rate: the room should feel the batch climb */
+  body[data-state="popping"]{
+    --field:color-mix(in oklab, #241A11, #5C3411 calc(var(--heat) * 100%));
+    --accent:var(--kernel);
+  }
   /* instrument failure, not an action: dead grey, not the pull orange */
-  body[data-state="deaf"]{--field:#15171A;--accent:#9AA5AD}
+  body[data-state="deaf"]{--field:#15171A;--accent:#9AA5AD;--steam:#7D868C}
   body[data-state="deaf"] .status{animation:flash 1.4s steps(1) infinite}
-  body[data-state="slowing"]{--field:#2E1A10;--accent:#F0872B}
-  body[data-state="pull"]{--field:var(--pull);--ink:#20120C;--accent:#20120C}
-  body[data-state="pull"] .rail,
-  body[data-state="pull"] .unit,
-  body[data-state="pull"] .hint,
-  body[data-state="pull"] .axis,
-  body[data-state="pull"] .note,
-  body[data-state="pull"] .tool,
-  body[data-state="pull"] .sens{color:rgba(32,18,12,.66)}
-  body[data-state="pull"] .primary{background:#20120C;color:var(--pull)}
-  body[data-state="pull"] .status{animation:flash 1s steps(1) infinite}
+  body[data-state="slowing"]{--field:#331B0E;--accent:#F0872B}
+  body[data-state="pull"]{
+    --field:var(--pull);--ink:var(--char);--accent:var(--char);--steam:rgba(26,13,7,.7);
+  }
+  /* the whole page throbs; an overlay so every surface brightens together */
+  body[data-state="pull"]::after{
+    content:"";position:fixed;inset:0;pointer-events:none;
+    background:#FFF3E0;opacity:0;
+    animation:throb 1.2s steps(1) infinite;
+  }
+  @keyframes throb{50%{opacity:.16}}
+  body[data-state="pull"] .wordmark i{color:inherit}
+  body[data-state="pull"] .primary{background:var(--char);color:var(--pull)}
+  body[data-state="pull"] .glyph .pulldot{background:var(--char)}
+  body[data-state="pull"] .tool{border-color:rgba(26,13,7,.45)}
+  body[data-state="pull"] .unit{display:none}
+  body[data-state="pull"] .status{
+    font-size:clamp(58px,17.5vw,124px);
+    font-variation-settings:"wdth" 82,"wght" 800;
+    text-transform:uppercase;line-height:.86;letter-spacing:-.01em;
+    margin-top:14px;max-width:7ch;
+  }
+  body[data-state="pull"] .hint{font-size:13px;font-weight:500;color:var(--char)}
+  /* the whole field throbs, so it reads from across the kitchen; the words stay solid */
   @keyframes flash{50%{opacity:.25}}
 
   @media (prefers-reduced-motion:reduce){
-    *{animation:none!important;transition:none!important}
+    /* the count keeps its small beat: it is the only per-pop feedback left */
+    *:not(.count){animation:none!important;transition:none!important}
+    .count{transition:none!important}
   }
-  @media (max-height:620px){
-    canvas{height:96px}
-    .status{margin-top:14px}
+  @media (max-height:700px){
+    .instrument{gap:12px}
+    .count{font-size:clamp(88px,30vw,160px)}
+    .status{margin-top:12px}
+  }
+
+  /* ---- desktop: instrument left, explainer and run log right ---- */
+  @media (min-width:960px){
+    #app{
+      max-width:1180px;padding:0 48px;
+      display:grid;grid-template-columns:minmax(0,600px) minmax(0,400px);
+      gap:80px;justify-content:center;
+    }
+    .instrument{height:100vh;height:100svh;position:sticky;top:0;padding:28px 0 32px}
+    .info{display:none}
+    .count{font-size:200px}
+    .side{
+      padding:84px 0 48px;display:flex;flex-direction:column;gap:32px;
+      max-height:100vh;max-height:100svh;overflow-y:auto;
+    }
+    .side .note{max-height:none}
   }
 </style>
 </head>
@@ -256,68 +426,123 @@
 
 <div id="app">
 
-  <div class="rail">
-    <span class="wordmark">Popwatch</span>
-    <div class="modes" role="group" aria-label="Input">
-      <button id="mMic" aria-pressed="true"><span>Mic</span></button>
-      <button id="mTap" aria-pressed="false"><span>Tap</span></button>
-    </div>
-  </div>
+  <main class="instrument">
 
-  <div class="readout">
-    <div class="count" id="count">0</div>
-    <div class="unit" id="unit">pops · last 3 seconds</div>
-    <div class="status" id="status">Ready</div>
-    <p class="hint" id="hint">Oil, three kernels, lid on. Start this when the rest of the corn goes in.</p>
-  </div>
-
-  <div class="curve">
-    <canvas id="curve" aria-hidden="true"></canvas>
-    <div class="axis">
-      <span>Elapsed <b id="elapsed">0:00</b></span>
-      <span>Peak <b id="peak">0</b></span>
-      <span>Total <b id="total">0</b></span>
-    </div>
-  </div>
-
-  <div class="controls">
-    <button class="tapzone" id="tapzone">Tap here on every pop</button>
-    <label class="sens">Sensitivity
-      <input id="sens" type="range" min="1.4" max="5" step="0.1" value="2.6">
-    </label>
-    <button class="primary" id="go">Start listening</button>
-    <div class="outcome" id="outcome" hidden>
-      <div class="oq">Kernels left
-        <span class="opts" id="oKern">
-          <button data-v="none">None</button><button data-v="few">A few</button><button data-v="lots">A lot</button>
-        </span>
-      </div>
-      <div class="oq">Scorched
-        <span class="opts" id="oScorch">
-          <button data-v="no">No</button><button data-v="yes">Yes</button>
-        </span>
+    <div class="rail">
+      <span class="wordmark">Pop<i>w</i>atch</span>
+      <div class="railr">
+        <div class="modes" role="group" aria-label="Input">
+          <button id="mMic" aria-pressed="true"><span>Mic</span></button>
+          <button id="mTap" aria-pressed="false"><span>Tap</span></button>
+        </div>
+        <button class="info" id="info" aria-label="How it works" aria-haspopup="dialog">?</button>
       </div>
     </div>
 
-    <div class="tools">
-      <button class="tool" id="skip" hidden>Skip</button>
-      <button class="tool" id="shake" hidden>Shake</button>
-      <button class="tool" id="oSkip" hidden>Skip logging</button>
-      <a class="tool" id="dl" download="popwatch-run.webm" hidden>Save recording</a>
-      <button class="tool" id="load">Replay a file</button>
-      <input id="file" type="file" accept="audio/*" hidden>
+    <div class="readout">
+      <div class="countwrap">
+        <div class="count" id="count" aria-live="off">0</div>
+        <div class="burst" id="burst" aria-hidden="true"></div>
+      </div>
+      <div class="unit" id="unit">pops · last 3 seconds</div>
+      <div class="status" id="status" role="status">Ready</div>
+      <p class="hint" id="hint">Oil and three kernels in the pot, lid on. Start before it goes on the heat.</p>
     </div>
 
-    <details class="log" id="logbox" hidden>
-      <summary>Run log · <span id="logn">0</span></summary>
-      <div class="logwrap"><table id="logtable"></table></div>
-      <button class="tool" id="logclear">Clear log</button>
-    </details>
+    <div class="curve">
+      <canvas id="curve" aria-hidden="true"></canvas>
+      <div class="axis">
+        <span>Elapsed <b id="elapsed">0:00</b></span>
+        <span>Peak <b id="peak">0</b></span>
+        <span>Total <b id="total">0</b></span>
+      </div>
+    </div>
 
-    <p class="note" id="note" hidden></p>
-  </div>
+    <ol class="track" id="track" aria-label="Procedure">
+      <li data-s="todo">
+        <span class="glyph dots" id="dots"><i></i><i></i><i></i></span>
+        <span>Test kernels</span>
+      </li>
+      <li data-s="todo">
+        <span class="glyph"><svg class="ring" viewBox="0 0 24 24" aria-hidden="true"><circle class="bg" cx="12" cy="12" r="10"/><circle class="fg" id="ring" cx="12" cy="12" r="10" pathLength="100"/></svg></span>
+        <span>Rest <b id="restLeft">30</b>s</span>
+      </li>
+      <li data-s="todo">
+        <span class="glyph"><svg class="hump" viewBox="0 0 28 18" aria-hidden="true"><path d="M1 17 C6 17 7 2 11 2 S18 13 27 16" fill="none" stroke="currentColor" stroke-width="2"/></svg></span>
+        <span>Popping</span>
+      </li>
+      <li data-s="todo">
+        <span class="glyph"><span class="pulldot"></span></span>
+        <span>Pull</span>
+      </li>
+    </ol>
+
+    <div class="controls" id="controls">
+      <button class="tapzone" id="tapzone">Tap here on every pop</button>
+      <button class="primary" id="go">Start listening</button>
+      <div class="outcome" id="outcome" hidden>
+        <div class="oq">Kernels left
+          <span class="opts" id="oKern">
+            <button data-v="none">None</button><button data-v="few">A few</button><button data-v="lots">A lot</button>
+          </span>
+        </div>
+        <div class="oq">Scorched
+          <span class="opts" id="oScorch">
+            <button data-v="no">No</button><button data-v="yes">Yes</button>
+          </span>
+        </div>
+        <button class="tool quiet" id="oSkip" hidden>Skip logging</button>
+      </div>
+
+      <details class="toolsbox" id="toolsbox">
+        <summary>Tools</summary>
+        <div class="toolpanel" id="toolpanel">
+          <label class="sens">Sensitivity
+            <input id="sens" type="range" min="1.4" max="5" step="0.1" value="2.6">
+            <output id="sensv">2.6</output>
+          </label>
+          <div class="toolgrid">
+            <button class="tool" id="skip" hidden>Skip</button>
+            <button class="tool" id="shake" hidden>Shake</button>
+            <button class="tool" id="load">Replay a file</button>
+            <a class="tool" id="dl" download="popwatch-run.webm" hidden>Save recording</a>
+            <input id="file" type="file" accept="audio/*" hidden>
+          </div>
+          <details class="log" id="logbox" hidden>
+            <summary>Run log · <span id="logn">0</span></summary>
+            <div class="logwrap"><table id="logtable"></table></div>
+            <button class="tool quiet" id="logclear">Clear log</button>
+          </details>
+        </div>
+      </details>
+
+      <p class="note" id="note" hidden></p>
+    </div>
+
+  </main>
+
+  <aside class="side" id="side"></aside>
 
 </div>
+
+<dialog class="sheet" id="sheet" aria-labelledby="aboutTitle">
+  <button class="close" id="sheetClose" aria-label="Close">✕</button>
+  <section class="about" id="about">
+    <h2 id="aboutTitle">How it works</h2>
+    <ol>
+      <li><span>Popwatch listens for the sharp crack of a kernel and counts pops over the last <span id="aWin">3</span> seconds.</span></li>
+      <li><span><span id="aTest">Three</span> test kernels go in first. When they pop, the oil is hot. Then <span id="aRest">30</span> seconds off the heat with the rest of the corn, and back on.</span></li>
+      <li><span>A batch rises fast, peaks, then trails off. Popwatch tracks the peak and tells you to pull the pot once the rate falls under <span id="aPull">15%</span> of it.</span></li>
+      <li><span>Stragglers cost you nothing. Scorch costs you the batch. Audio never leaves your phone.</span></li>
+    </ol>
+    <figure>
+      <svg id="aboutCurve" viewBox="0 0 320 120" aria-hidden="true"></svg>
+      <figcaption>A typical batch. The dashed line is the pull threshold. The live curve draws over this while you cook.</figcaption>
+    </figure>
+    <p class="by">Made by Anton Beckman · <a href="https://antonbeckman.se">antonbeckman.se</a></p>
+  </section>
+  <button class="primary gotit" id="gotit">Got it</button>
+</dialog>
 
 <script>
 (function(){
@@ -356,6 +581,14 @@
   var LOG_KEY      = "popwatch.runs";
   var SHAKE_TOL    = 400;   // ms either side of a shake mark counts as "at" it
 
+  // Display only: the faint "expected" curve behind the live one.
+  // ponytail: illustrative shape, not fitted. Fit it to logged runs once there are enough.
+  var EXPECT_PEAK  = 55000; // where a typical batch peaks, ms into phase 3
+  var EXPECT_SPAN  = 150000;// the curve's x-axis until a batch runs longer
+  var EXPECT_SKEW  = 2.4;   // shape: higher is a sharper rise and a longer tail
+  var HEAT_FULL    = 24;    // pops per window that reads as "flat out" on the dial
+  var SEEN_KEY     = "popwatch.seen";
+
   var $ = function(id){ return document.getElementById(id); };
   var body = document.body;
   var elCount = $("count"), elStatus = $("status"), elHint = $("hint"),
@@ -366,7 +599,11 @@
       elUnit = $("unit"), elSkip = $("skip"), elShake = $("shake"),
       elOutcome = $("outcome"), elOKern = $("oKern"), elOScorch = $("oScorch"),
       elOSkip = $("oSkip"), elLogBox = $("logbox"), elLogN = $("logn"),
-      elLogTable = $("logtable"), elLogClear = $("logclear");
+      elLogTable = $("logtable"), elLogClear = $("logclear"),
+      elTrack = $("track"), elDots = $("dots"), elRing = $("ring"), elRestLeft = $("restLeft"),
+      elBurst = $("burst"), elSensV = $("sensv"), elInfo = $("info"), elSheet = $("sheet"),
+      elAbout = $("about"), elSide = $("side"), elToolPanel = $("toolpanel"),
+      elControls = $("controls"), elToolsBox = $("toolsbox");
 
   var cv = $("curve"), ctx = cv.getContext("2d");
 
@@ -411,43 +648,118 @@
     ctx.setTransform(d, 0, 0, d, 0, 0);
     draw();
   }
-  window.addEventListener("resize", fit);
+  new ResizeObserver(fit).observe(cv);
+  // label chips are filled with the field colour, so redraw once it settles
+  body.addEventListener("transitionend", function(e){ if(e.target === body) draw(); });
 
   function css(name){
     return getComputedStyle(body).getPropertyValue(name).trim();
   }
 
+  // 0..1, peaking at 1 when ms === peakMs: rises from ~36% of the peak time,
+  // then a long right tail
+  function expected(ms, peakMs){
+    var u = (ms - peakMs * .36) / (peakMs * .64);
+    return u <= 0 ? 0 : Math.pow(u, EXPECT_SKEW) * Math.exp(EXPECT_SKEW * (1 - u));
+  }
+
+  // where the expected tail crosses a fraction of its peak
+  function expectedCross(frac, peakMs){
+    for(var ms = peakMs; ms < peakMs * 6; ms += 250){
+      if(expected(ms, peakMs) < frac) return ms;
+    }
+    return peakMs * 6;
+  }
+
   function draw(){
     var w = cv.clientWidth, h = cv.clientHeight;
     ctx.clearRect(0, 0, w, h);
-    if(!series.length){ return; }
+    if(!w || !h) return;
 
     var ink = css("--ink"), accent = css("--accent"), steam = css("--steam");
-    var top = Math.max(peakRate, 1) * 1.15;
-    var n = series.length;
-    var barW = Math.max(1.5, Math.min(6, w / Math.max(n, 60)));
-    var step = w / Math.max(n, 60);
+    var pad = 16;                                       // headroom for the labels
+    var live = peakRate > 0;
+    var peakMs = live ? Math.max(peakAt - t0, 12000) : EXPECT_PEAK;
+    var ref = live ? peakRate : 1;                      // what "100% of peak" is
+    var top = ref * 1.12;
+    var last = series.length ? series[series.length - 1].t - t0 : 0;
+    var span = Math.max(EXPECT_SPAN, expectedCross(PULL_FRAC, peakMs) * 1.15, last * 1.08);
+    var X = function(ms){ return ms / span * w; };
+    var Y = function(v){ return h - (v / top) * (h - pad); };
+    var i, x;
 
-    // threshold line: the moment the rule fires
-    var y = h - (peakRate * PULL_FRAC / top) * h;
-    ctx.strokeStyle = accent;
-    ctx.globalAlpha = .5;
-    ctx.setLineDash([2, 5]);
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    // expected batch, faint, scaled to the real peak once there is one
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for(x = 0; x <= w; x += 2) ctx.lineTo(x, Y(expected(x / w * span, peakMs) * ref));
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fillStyle = steam; ctx.globalAlpha = .1; ctx.fill();
+    ctx.strokeStyle = steam; ctx.globalAlpha = .55; ctx.lineWidth = 1.25; ctx.stroke();
+
+    // where the rule would fire on that expected curve
+    var xc = X(expectedCross(PULL_FRAC, peakMs));
+    ctx.setLineDash([1, 3]);
+    ctx.beginPath(); ctx.moveTo(xc, h); ctx.lineTo(xc, Y(ref * PULL_FRAC) - 6); ctx.stroke();
+
+    // threshold lines: slowing band, then the one that pulls the pot
+    var lines = [[SLOW_FRAC, "slowing", .45], [PULL_FRAC, "pull", 1]];
+    lines.forEach(function(l){
+      var y = Math.round(Y(ref * l[0])) + .5;
+      ctx.strokeStyle = accent; ctx.globalAlpha = l[2] * .8;
+      ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    });
     ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
 
-    for(var i = 0; i < n; i++){
-      var v = series[i].rate;
-      var bh = Math.max(v > 0 ? 2 : 0, (v / top) * h);
-      var x = i * step;
-      var isPeak = series[i].t === peakAt && v === peakRate;
-      ctx.fillStyle = isPeak ? accent : ink;
-      ctx.globalAlpha = isPeak ? 1 : .42;
-      ctx.fillRect(x, h - bh, barW, bh);
+    // the live batch over the top
+    if(series.length){
+      ctx.beginPath();
+      ctx.moveTo(X(series[0].t - t0), h);
+      for(i = 0; i < series.length; i++) ctx.lineTo(X(series[i].t - t0), Y(series[i].rate));
+      ctx.lineTo(X(last), h);
+      ctx.closePath();
+      ctx.fillStyle = ink; ctx.globalAlpha = .14; ctx.fill();
+      ctx.beginPath();
+      for(i = 0; i < series.length; i++) ctx.lineTo(X(series[i].t - t0), Y(series[i].rate));
+      ctx.strokeStyle = ink; ctx.globalAlpha = .95; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
+
+      if(live){
+        ctx.fillStyle = accent; ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(X(peakAt - t0), Y(peakRate), 3.5, 0, Math.PI * 2); ctx.fill();
+      }
+      if(pullAt != null){
+        ctx.fillStyle = ink; ctx.globalAlpha = 1;
+        ctx.fillRect(Math.round(X(pullAt)) - 1, pad - 4, 2, h - pad + 4);
+      }
     }
+
+    // labels last, on a chip of field colour so the batch never covers them
+    ctx.font = "500 9px " + css("--mono");
+    ctx.textBaseline = "middle"; ctx.textAlign = "right";
+    var bg = getComputedStyle(body).backgroundColor;
+    lines.forEach(function(l){
+      var y = Math.round(Y(ref * l[0])), t = (l[1] + " · " + Math.round(l[0] * 100) + "% of peak").toUpperCase();
+      var tw = ctx.measureText(t).width;
+      ctx.globalAlpha = 1; ctx.fillStyle = bg;
+      ctx.fillRect(w - tw - 8, y - 7, tw + 8, 14);
+      ctx.fillStyle = accent; ctx.globalAlpha = l[2];
+      ctx.fillText(t, w - 2, y + .5);
+    });
     ctx.globalAlpha = 1;
+  }
+
+  // the same expected curve, static, for the explainer
+  function drawAboutCurve(){
+    var w = 320, h = 120, pad = 14, d = "M0 " + h, c = expectedCross(PULL_FRAC, EXPECT_PEAK);
+    var span = Math.max(EXPECT_SPAN, c * 1.15);
+    for(var x = 0; x <= w; x += 4) d += " L" + x + " " + (h - expected(x / w * span, EXPECT_PEAK) * (h - pad)).toFixed(1);
+    var yp = (h - PULL_FRAC * (h - pad)).toFixed(1), xc = (c / span * w).toFixed(1);
+    $("aboutCurve").innerHTML =
+      '<path d="' + d + ' L' + w + ' ' + h + 'Z" fill="#F2E8D5" fill-opacity=".1" stroke="#F2E8D5" stroke-width="1.5"/>' +
+      '<line x1="0" x2="' + w + '" y1="' + yp + '" y2="' + yp + '" stroke="#EF5423" stroke-dasharray="3 4"/>' +
+      '<rect x="' + (xc - 1) + '" y="' + (yp - 18) + '" width="2" height="' + (h - yp + 18) + '" fill="#EF5423"/>' +
+      '<text x="' + (+xc + 6) + '" y="' + (yp - 8) + '" fill="#EF5423" font-family="Martian Mono, monospace" font-size="9" letter-spacing="1">PULL</text>';
   }
 
   /* ---------- the rule engine ---------- */
@@ -482,7 +794,66 @@
       elCount.classList.remove("beat");
       void elCount.offsetWidth;   // forces a reflow, so skipped during replay
       elCount.classList.add("beat");
+      burst(now);
     }
+  }
+
+  /* ---------- display layer ----------
+     Reads the engine's state, never writes it. Skipped while replaying, the
+     same way draw() is, so replay and selftest run exactly as before. */
+
+  var calm = matchMedia("(prefers-reduced-motion: reduce)");
+
+  function burst(now){
+    if(calm.matches || elBurst.childElementCount > 36) return;
+    var r = rateNow(now);
+    var n = r > 18 ? 2 : r > 10 ? 3 : r > 4 ? 5 : 8;   // dense popping gets a lighter touch
+    var reach = r > 10 ? 60 : 100;
+    for(var i = 0; i < n; i++){
+      var p = document.createElement("i");
+      elBurst.appendChild(p);
+      var a = Math.random() * Math.PI * 2, d = reach * (.5 + Math.random() * .6);
+      var x0 = (Math.random() - .5) * 80, y0 = (Math.random() - .5) * 50;
+      var x1 = x0 + Math.cos(a) * d, y1 = y0 + Math.sin(a) * d * .7 - 24;
+      var s = .9 + Math.random() * .8;
+      p.animate([
+        {transform: "translate(" + x0 + "px," + y0 + "px) scale(.4)", opacity: 1,
+         background: "#E8B31F", borderRadius: "50%"},
+        {offset: .3, background: "#F2E8D5", borderRadius: "46% 54% 40% 60%", opacity: 1},
+        {transform: "translate(" + x1 + "px," + y1 + "px) scale(" + s + ")", opacity: 0,
+         background: "#F2E8D5", borderRadius: "58% 42% 55% 45%"}
+      ], {duration: 480 + Math.random() * 220, easing: "cubic-bezier(.15,.8,.3,1)"})
+        .onfinish = function(){ this.effect.target.remove(); };
+    }
+  }
+
+  function ui(){
+    if(replaying) return;
+    var done = !elOutcome.hidden;
+    var step = phase === "test" ? 0 : phase === "rest" ? 1
+             : phase === "main" ? (state === "pull" ? 3 : 2)
+             : done ? 4 : series.length ? (state === "pull" ? 3 : 2) : -1;
+    Array.prototype.forEach.call(elTrack.children, function(li, i){
+      li.dataset.s = step < 0 || i > step ? "todo" : i < step ? "done" : "now";
+      if(i === step) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+    });
+
+    var heard = phase === "test" ? pops.length : step > 0 ? TEST_KERNELS : 0;
+    Array.prototype.forEach.call(elDots.children, function(d, i){
+      d.classList.toggle("on", i < heard && !(dud && step > 0 && i === TEST_KERNELS - 1));
+      d.classList.toggle("dud", dud && step > 0 && i === TEST_KERNELS - 1);
+    });
+
+    var left = phase === "rest" ? Math.max(0, REST_MS - (clock() - t0)) : step > 1 ? 0 : REST_MS;
+    elRing.style.strokeDashoffset = 100 * (1 - left / REST_MS);
+    elRestLeft.textContent = Math.ceil(left / 1000);
+
+    // the count widens as the batch climbs, and is widest when it is time to pull
+    var rate = step >= 2 ? (+elCount.textContent || 0) : 0;
+    var heat = Math.min(1, rate / HEAT_FULL);
+    body.style.setProperty("--heat", heat.toFixed(3));
+    elCount.style.setProperty("--wdth",
+      state === "pull" ? 125 : phase === "rest" ? 72 : step >= 2 ? Math.round(66 + 59 * heat) : 100);
   }
 
   /* ---------- phases ----------
@@ -508,6 +879,7 @@
     elSkip.textContent = p === "test" ? "Skip to rest" : "Skip to heat";
     elShake.hidden = !(running && p === "main");
     if(!replaying) draw();
+    ui();
   }
 
   function toRest(wasDud){
@@ -588,6 +960,7 @@
   function loopTick(){
     if(!running) return;
     tick();
+    ui();
     setTimeout(loopTick, 100);
   }
 
@@ -595,36 +968,37 @@
     if(state === "deaf"){
       elStatus.textContent = "Not hearing anything";
       elHint.textContent = "Nothing at all in " + Math.round(elapsed / 1000) + " seconds. That is a broken "
-        + "detector, not a quiet pot — check the mic permission, the distance, the extractor fan. "
+        + "detector, not a quiet pot. Check the mic permission, the distance, the extractor fan. "
         + "Watch the pot yourself until this number moves.";
       return;
     }
+    // the phase track carries the procedure; these lines only say what to do now
     if(phase === "test"){
       elStatus.textContent = rate ? rate + " of 3" : "Test kernels";
-      elHint.textContent = "Three kernels in the oil, lid on, heat up. When all three have popped the oil is at temperature.";
+      elHint.textContent = "Lid on, heat up. Waiting for all three to pop.";
       return;
     }
     if(phase === "rest"){
       elStatus.textContent = "Resting";
       elHint.textContent = dud
-        ? "Third kernel was a dud — two is enough. Off the heat, corn in, lid on. Back on the heat at zero."
+        ? "Third kernel was a dud, two is enough. Off the heat, corn in, lid on."
         : "Off the heat, corn in, lid on. Back on the heat at zero.";
       return;
     }
     if(state === "pull"){
       elStatus.textContent = "Pull the pot";
-      elHint.textContent = "Off the heat, lid off, tip it out. Stragglers cost you nothing; scorch costs you the batch.";
+      elHint.textContent = "Off the heat, lid off, tip it out.";
     } else if(state === "slowing"){
       elStatus.textContent = "Slowing";
       elHint.textContent = "Past the peak. Keep shaking, get the bowl ready.";
     } else if(state === "popping"){
       elStatus.textContent = "Popping";
-      elHint.textContent = "Lid cracked a finger's width to let the steam out. Shake every 15 seconds.";
+      elHint.textContent = "Lid cracked for the steam. Shake every 15 seconds.";
     } else {
       elStatus.textContent = "Listening";
       elHint.textContent = mode === "mic"
-        ? "Nothing yet. First pops usually land 60 to 90 seconds in."
-        : "Nothing yet. Tap the panel below on every pop you hear.";
+        ? "Back on the heat. First pops usually land 60 to 90 seconds in."
+        : "Back on the heat. Tap the panel below on every pop.";
     }
   }
 
@@ -1049,8 +1423,9 @@
     elStatus.textContent = real ? "Done" : "Ready";
     elHint.textContent = real
       ? pops.length + " pops, peak " + peakRate + " per 3 seconds. How did it turn out?"
-      : "Oil, three kernels, lid on. Start this before the pan goes on the heat.";
-    elGo.textContent = "Start listening";
+      : "Oil and three kernels in the pot, lid on. Start before it goes on the heat.";
+    elGo.textContent = mode === "mic" ? "Start listening" : "Start counting";
+    ui();
   }
 
   function setMode(m){
@@ -1101,7 +1476,33 @@
   elFile.addEventListener("change", function(){
     var f = elFile.files[0];
     elFile.value = "";
-    if(f) replay(f);
+    if(f){ elToolsBox.open = true; replay(f).then(ui); }
+  });
+
+  elSens.addEventListener("input", function(){ elSensV.value = elSens.value; });
+
+  /* ---------- how it works ----------
+     A bottom sheet on a phone, a standing column on desktop. Same node, moved. */
+
+  var wide = matchMedia("(min-width: 960px)");
+  function place(){
+    var w = wide.matches;
+    if(w && elSheet.open) elSheet.close();
+    (w ? elSide : elSheet).insertBefore(elAbout, w ? null : $("gotit"));
+    (w ? elSide : elToolPanel).appendChild(elLogBox);
+    (w ? elSide : elControls).appendChild(elNote);
+    elLogBox.open = w;
+  }
+  wide.addEventListener("change", place);
+
+  function seen(){ try{ localStorage.setItem(SEEN_KEY, "1"); }catch(e){} }
+  elInfo.addEventListener("click", function(){ elSheet.showModal(); });
+  $("sheetClose").addEventListener("click", function(){ elSheet.close(); });
+  $("gotit").addEventListener("click", function(){ elSheet.close(); });
+  elSheet.addEventListener("close", seen);
+  elSheet.addEventListener("click", function(e){
+    var r = elSheet.getBoundingClientRect();
+    if(e.target === elSheet && e.clientY < r.top) elSheet.close();   // backdrop tap
   });
 
   /* ---------- self-check: popwatch.html?selftest ---------- */
@@ -1180,11 +1581,82 @@
                 ", replay " + r.pops + " pops, " + log.join(" "));
   }
 
+  /* ---------- demo snapshots: index.html?demo=popping ----------
+     Runs the real engine on the virtual clock, like selftest, then freezes.
+     For screenshots; Start reloads the page clean. */
+  function demo(target){
+    if(target === "idle") return;
+    var seed = 7, rnd = function(){ seed = seed * 16807 % 2147483647; return seed / 2147483647; };
+    var at = function(ms){ vt = ms; tick(); };
+    replaying = true;
+    clock = function(){ return vt; };
+    running = true;
+    vt = 0; setPhase("test");
+    if(target === "deaf"){ at(DEAF_TEST_MS + 10); }
+    else if(target !== "idle"){
+      pop(4000); at(4100);
+      pop(9000); at(9100);
+      if(target !== "test"){
+        pop(13000); at(13100);                            // third kernel: rest starts
+        if(target === "rest") at(t0 + 18000);
+        else {
+          at(t0 + REST_MS + 10);                          // back on the heat
+          var m0 = t0, stopAt = {popping: function(){ return vt - m0 >= 62000; },
+                                 slowing: function(){ return state === "slowing"; }}[target] ||
+                                function(){ return state === "pull"; };
+          for(var t = 0; t < 300000 && !stopAt(); t += 10){
+            vt = m0 + t;
+            if(rnd() < expected(t, EXPECT_PEAK) * 9 * .01) pop(vt);   // ~27 per window at the peak
+            if(t % 100 === 0) tick();
+          }
+        }
+      }
+    }
+    replaying = false;
+    body.dataset.run = "on";
+    elGo.textContent = "Stop";
+    if(target === "outcome"){
+      running = false; body.dataset.run = "off";
+      phase = "idle"; body.dataset.phase = "idle";
+      setState("idle");
+      elStatus.textContent = "Done";
+      elHint.textContent = pops.length + " pops, peak " + peakRate + " per 3 seconds. How did it turn out?";
+      elGo.textContent = "Start listening";
+      showOutcome();
+    }
+    var go = elGo.cloneNode(true);
+    elGo.replaceWith(go);
+    go.addEventListener("click", function(){ location.href = location.pathname; });
+    draw(); ui();
+  }
+
+  $("aWin").textContent = WINDOW_MS / 1000;
+  $("aTest").textContent = ["Zero", "One", "Two", "Three", "Four", "Five"][TEST_KERNELS] || TEST_KERNELS;
+  $("aRest").textContent = REST_MS / 1000;
+  $("aPull").textContent = Math.round(PULL_FRAC * 100) + "%";
+  elRestLeft.textContent = REST_MS / 1000;
+  drawAboutCurve();
+  place();
+
   fit();
+  if(document.fonts) document.fonts.ready.then(draw);   // canvas labels need the mono face
   body.dataset.phase = "idle";
   renderLog();
-  note("Mic mode needs HTTPS. Opened straight from a file, use Tap.");
+  if(!window.isSecureContext) note("Mic mode needs HTTPS. Opened straight from a file, use Tap.");
   if(location.search.indexOf("selftest") >= 0) selftest();
+  var demoState = (location.search.match(/demo=(\w+)/) || [])[1];
+  if(demoState) demo(demoState);
+  ui();
+
+  // first visit: explain before anything else (desktop shows it in the side column)
+  var first = true;
+  try{ first = !localStorage.getItem(SEEN_KEY); }catch(e){}
+  if(first && !demoState && !wide.matches) elSheet.showModal();
+  if(first && wide.matches) seen();
+
+  if("serviceWorker" in navigator && window.isSecureContext){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  }
 })();
 </script>
 </body>
